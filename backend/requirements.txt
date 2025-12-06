@@ -1,0 +1,31 @@
+# Forex Analyzer - Python Paketleri
+# ===================================
+
+# API Server - Backend'i çalıştırır
+fastapi==0.115.6
+uvicorn==0.32.1
+
+# TradingView'dan veri çeker
+tradingview-ta==3.3.0
+
+# Veri analizi için
+pandas==2.2.3
+
+# İnternetten veri çekmek için (haberler)
+requests==2.32.3
+
+# Tarih/saat işlemleri
+python-dateutil==2.9.0
+
+# JSON işlemleri için
+pydantic==2.10.3
+
+# Kripto ve hisse verisi için
+yfinance>=0.2.40
+
+# Kripto borsaları API (Binance, Bybit vs.)
+ccxt>=4.0.0
+
+# Teknik analiz kütüphanesi
+ta>=0.11.0
+
