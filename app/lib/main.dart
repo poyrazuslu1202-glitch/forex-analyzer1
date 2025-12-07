@@ -1,10 +1,11 @@
 // ============================================
-// FOREX ANALYZER - ICT Concepts + Trade Signals
-// TradingView Dark Theme (Grafiksiz versiyon)
+// FOREX ANALYZER PRO - ICT Concepts + Candlestick
+// TradingView Dark Theme
 // ============================================
 
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:http/http.dart' as http;
 
 void main() {
@@ -25,6 +26,8 @@ class TV {
   static const redBg = Color(0xFF2D1F21);
   static const blue = Color(0xFF2962FF);
   static const orange = Color(0xFFF7931A);
+  static const purple = Color(0xFF9C27B0);
+  static const cyan = Color(0xFF00BCD4);
 }
 
 class ForexAnalyzerApp extends StatelessWidget {
@@ -50,8 +53,11 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   bool isLoading = false;
   Map<String, dynamic>? fullReport;
+  Map<String, dynamic>? supplyDemand;
+  Map<String, dynamic>? solanaData;
   String? error;
   final String apiUrl = 'https://forex-analyzer1-cyhv.onrender.com';
+  String selectedCrypto = 'BTC'; // BTC veya SOL
 
   @override
   void initState() {
@@ -63,12 +69,24 @@ class _HomePageState extends State<HomePage> {
     setState(() { isLoading = true; error = null; });
     
     try {
-      final response = await http.get(Uri.parse('$apiUrl/full-report'));
-      if (response.statusCode == 200) {
-        setState(() { fullReport = json.decode(response.body); isLoading = false; });
-      } else {
-        setState(() { error = 'API Hatası: ${response.statusCode}'; isLoading = false; });
+      // Paralel API çağrıları
+      final responses = await Future.wait([
+        http.get(Uri.parse('$apiUrl/full-report')),
+        http.get(Uri.parse('$apiUrl/supply-demand/BTC')),
+        http.get(Uri.parse('$apiUrl/full-analysis/SOL')),
+      ]);
+      
+      if (responses[0].statusCode == 200) {
+        fullReport = json.decode(responses[0].body);
       }
+      if (responses[1].statusCode == 200) {
+        supplyDemand = json.decode(responses[1].body);
+      }
+      if (responses[2].statusCode == 200) {
+        solanaData = json.decode(responses[2].body);
+      }
+      
+      setState(() { isLoading = false; });
     } catch (e) {
       setState(() { error = 'Backend çalışıyor mu?\n\n$e'; isLoading = false; });
     }
@@ -108,19 +126,22 @@ class _HomePageState extends State<HomePage> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(color: TV.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                  child: const Text('₿', style: TextStyle(fontSize: 24, color: TV.orange)),
+                  child: const Text('📊', style: TextStyle(fontSize: 24)),
                 ),
                 const SizedBox(width: 12),
                 const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('FOREX ANALYZER', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: TV.text, letterSpacing: 1)),
-                    Text('ICT Strategy Edition', style: TextStyle(fontSize: 11, color: TV.textDim)),
+                    Text('ICT Strategy Pro', style: TextStyle(fontSize: 11, color: TV.textDim)),
                   ],
                 ),
               ],
             ),
           ),
+          
+          // Crypto Selector
+          _buildCryptoSelector(),
           
           if (signal != null) _buildMainSignalCard(signal),
           if (ict != null) _buildKillZonesPanel(ict['kill_zones']),
@@ -142,6 +163,64 @@ class _HomePageState extends State<HomePage> {
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildCryptoSelector() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: TV.bg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: TV.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => selectedCrypto = 'BTC'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: selectedCrypto == 'BTC' ? TV.orange.withOpacity(0.2) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: selectedCrypto == 'BTC' ? TV.orange : Colors.transparent),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('₿', style: TextStyle(fontSize: 16, color: selectedCrypto == 'BTC' ? TV.orange : TV.textDim)),
+                    const SizedBox(width: 6),
+                    Text('BTC', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: selectedCrypto == 'BTC' ? TV.orange : TV.textDim)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => selectedCrypto = 'SOL'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: selectedCrypto == 'SOL' ? TV.purple.withOpacity(0.2) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: selectedCrypto == 'SOL' ? TV.purple : Colors.transparent),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('◎', style: TextStyle(fontSize: 16, color: selectedCrypto == 'SOL' ? TV.purple : TV.textDim)),
+                    const SizedBox(width: 6),
+                    Text('SOL', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: selectedCrypto == 'SOL' ? TV.purple : TV.textDim)),
+                  ],
                 ),
               ),
             ),
@@ -299,7 +378,7 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
     );
@@ -339,6 +418,7 @@ class _HomePageState extends State<HomePage> {
       );
     }
     
+    // Seçilen crypto'ya göre veri
     final btc = fullReport!['btc_report'];
     final signal = fullReport!['trade_signal'];
     final ict = fullReport!['ict_analysis'];
@@ -350,17 +430,22 @@ class _HomePageState extends State<HomePage> {
         children: [
           _buildHeader(btc, signal),
           const SizedBox(height: 24),
-          _buildPriceChart(btc),
+          
+          // Candlestick Chart
+          _buildCandlestickChart(btc),
           const SizedBox(height: 24),
+          
+          // Supply/Demand ve FVG
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: _buildSignalsCard(signal)),
+              Expanded(child: _buildSupplyDemandCard()),
               const SizedBox(width: 16),
-              Expanded(child: _buildLevelsCard(signal)),
+              Expanded(child: _buildFVGCard(ict)),
             ],
           ),
           const SizedBox(height: 24),
+          
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -370,9 +455,636 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
           const SizedBox(height: 24),
+          
+          // Solana Card (if selected)
+          if (selectedCrypto == 'SOL' && solanaData != null)
+            _buildSolanaCard(),
+          
+          if (selectedCrypto == 'SOL' && solanaData != null)
+            const SizedBox(height: 24),
+          
           _buildBacktestCard(fullReport!['backtest']),
           const SizedBox(height: 24),
-          _buildCandleTable(btc),
+          _buildNewsCard(fullReport!['news']),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildNewsCard(Map<String, dynamic>? news) {
+    if (news == null) return const SizedBox();
+    
+    final fearGreed = news['fear_greed'] ?? {};
+    final cryptoNews = news['crypto_news'] as List? ?? [];
+    final events = news['important_events'] as List? ?? [];
+    final sentiment = news['market_sentiment'] ?? {};
+    
+    final fgValue = fearGreed['value'] ?? 50;
+    final fgEmoji = fearGreed['emoji'] ?? '😐';
+    final fgClass = fearGreed['classification'] ?? 'Neutral';
+    final fgColor = _hexToColor(fearGreed['color'] ?? '#F7931A');
+    final fgSuggestion = fearGreed['suggestion'] ?? '';
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: TV.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: TV.purple, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.newspaper, color: TV.purple, size: 20),
+              const SizedBox(width: 8),
+              const Text('PIYASA HABERLERİ & SENTIMENT', 
+                style: TextStyle(fontSize: 12, color: TV.purple, fontWeight: FontWeight.w600, letterSpacing: 1)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          
+          // Fear & Greed Index
+          Row(
+            children: [
+              // Fear & Greed Gauge
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: TV.bg,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: fgColor.withOpacity(0.5)),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(fgEmoji, style: const TextStyle(fontSize: 40)),
+                      const SizedBox(height: 8),
+                      Text('$fgValue', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: fgColor)),
+                      Text(fgClass, style: TextStyle(fontSize: 12, color: fgColor)),
+                      const SizedBox(height: 8),
+                      Container(
+                        height: 8,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(4),
+                          gradient: const LinearGradient(colors: [TV.red, Color(0xFFFF6B00), TV.orange, TV.green, Color(0xFF00C853)]),
+                        ),
+                        child: Stack(
+                          children: [
+                            Positioned(
+                              left: (fgValue / 100) * 180,
+                              child: Container(
+                                width: 4, height: 8,
+                                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(fgSuggestion, style: const TextStyle(fontSize: 10, color: TV.textDim), textAlign: TextAlign.center),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              
+              // Önemli Eventler
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: TV.bg,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: TV.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.event, color: TV.orange, size: 16),
+                          SizedBox(width: 6),
+                          Text('ÖNEMLİ EVENTLER', style: TextStyle(fontSize: 10, color: TV.orange, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (events.isEmpty)
+                        const Text('Yakın zamanda önemli event yok', style: TextStyle(fontSize: 11, color: TV.textMuted))
+                      else
+                        ...events.take(3).map((e) => Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: e['impact'] == 'HIGH' ? TV.red.withOpacity(0.1) : TV.orange.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            children: [
+                              Text(e['emoji'] ?? '📅', style: const TextStyle(fontSize: 16)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(e['name'] ?? '', style: const TextStyle(fontSize: 11, color: TV.text, fontWeight: FontWeight.w600)),
+                                    Text(e['time'] ?? '', style: const TextStyle(fontSize: 9, color: TV.textDim)),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: e['impact'] == 'HIGH' ? TV.red : TV.orange,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(e['impact'] ?? '', style: const TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        )),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          // Son Haberler
+          const Row(
+            children: [
+              Icon(Icons.article, color: TV.cyan, size: 16),
+              SizedBox(width: 6),
+              Text('SON KRİPTO HABERLERİ', style: TextStyle(fontSize: 10, color: TV.cyan, fontWeight: FontWeight.w600)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          if (cryptoNews.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: TV.bg, borderRadius: BorderRadius.circular(8)),
+              child: const Text('Haberler yükleniyor...', style: TextStyle(color: TV.textMuted), textAlign: TextAlign.center),
+            )
+          else
+            ...cryptoNews.take(5).map((n) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: TV.bg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: TV.border),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(n['emoji'] ?? '📰', style: const TextStyle(fontSize: 20)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(n['title'] ?? '', style: const TextStyle(fontSize: 12, color: TV.text, fontWeight: FontWeight.w500), maxLines: 2, overflow: TextOverflow.ellipsis),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Text(n['source'] ?? '', style: const TextStyle(fontSize: 10, color: TV.blue)),
+                            const SizedBox(width: 8),
+                            Text('• ${n['time_ago'] ?? ''}', style: const TextStyle(fontSize: 10, color: TV.textMuted)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            )),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildHeader(Map<String, dynamic>? btc, Map<String, dynamic>? signal) {
+    final summary = btc?['summary'] ?? {};
+    final price = summary['current_price'] ?? 0;
+    final change = summary['total_change_percent'] ?? 0;
+    final direction = signal?['direction'] ?? 'WAIT';
+    Color changeColor = change >= 0 ? TV.green : TV.red;
+    
+    final cryptoSymbol = selectedCrypto == 'BTC' ? '₿' : '◎';
+    final cryptoColor = selectedCrypto == 'BTC' ? TV.orange : TV.purple;
+    
+    // SOL için farklı fiyat
+    double displayPrice = price.toDouble();
+    if (selectedCrypto == 'SOL' && solanaData != null) {
+      final solPrice = solanaData!['analysis']?['current_price'];
+      if (solPrice != null) displayPrice = solPrice.toDouble();
+    }
+    
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(color: TV.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: TV.border)),
+      child: Row(
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: cryptoColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                child: Text(cryptoSymbol, style: TextStyle(fontSize: 32, color: cryptoColor)),
+              ),
+              const SizedBox(width: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('$selectedCrypto/USD', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: TV.text)),
+                  const Text('Son 24 saat raporu', style: TextStyle(fontSize: 12, color: TV.textDim)),
+                ],
+              ),
+            ],
+          ),
+          const Spacer(),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text('\$${_fmt(displayPrice)}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: TV.text)),
+              Row(
+                children: [
+                  Icon(change >= 0 ? Icons.arrow_upward : Icons.arrow_downward, color: changeColor, size: 16),
+                  Text(' ${change >= 0 ? '+' : ''}${change.toStringAsFixed(2)}%', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: changeColor)),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(width: 32),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            decoration: BoxDecoration(
+              color: direction == 'LONG' ? TV.greenBg : (direction == 'SHORT' ? TV.redBg : TV.orange.withOpacity(0.1)),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: direction == 'LONG' ? TV.green : (direction == 'SHORT' ? TV.red : TV.orange), width: 2),
+            ),
+            child: Column(
+              children: [
+                Text(direction == 'LONG' ? '🟢' : (direction == 'SHORT' ? '🔴' : '🟡'), style: const TextStyle(fontSize: 24)),
+                Text(direction, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: direction == 'LONG' ? TV.green : (direction == 'SHORT' ? TV.red : TV.orange))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildCandlestickChart(Map<String, dynamic>? btc) {
+    final candles = btc?['candles'] as List? ?? [];
+    if (candles.isEmpty) return const SizedBox();
+    
+    // Min/Max bul
+    double minPrice = double.infinity;
+    double maxPrice = 0;
+    for (var c in candles) {
+      final low = (c['low'] ?? 0).toDouble();
+      final high = (c['high'] ?? 0).toDouble();
+      if (low < minPrice) minPrice = low;
+      if (high > maxPrice) maxPrice = high;
+    }
+    final range = maxPrice - minPrice;
+    final padding = range * 0.1;
+    minPrice -= padding;
+    maxPrice += padding;
+    final totalRange = maxPrice - minPrice;
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: TV.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: TV.border)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('CANDLESTICK CHART', style: TextStyle(fontSize: 12, color: TV.textDim, fontWeight: FontWeight.w600)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: TV.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                child: const Text('1H • 24 Candles', style: TextStyle(fontSize: 10, color: TV.blue)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 250,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Y-axis labels
+                SizedBox(
+                  width: 60,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('\$${_fmt(maxPrice)}', style: const TextStyle(fontSize: 9, color: TV.textMuted)),
+                      Text('\$${_fmt((maxPrice + minPrice) / 2)}', style: const TextStyle(fontSize: 9, color: TV.textMuted)),
+                      Text('\$${_fmt(minPrice)}', style: const TextStyle(fontSize: 9, color: TV.textMuted)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Chart
+                Expanded(
+                  child: CustomPaint(
+                    painter: CandlestickPainter(candles, minPrice, totalRange),
+                    child: Container(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildSupplyDemandCard() {
+    if (supplyDemand == null) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(color: TV.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: TV.border)),
+        child: const Column(
+          children: [
+            Icon(Icons.hourglass_empty, color: TV.textDim, size: 32),
+            SizedBox(height: 8),
+            Text('Supply/Demand yükleniyor...', style: TextStyle(color: TV.textDim, fontSize: 12)),
+          ],
+        ),
+      );
+    }
+    
+    final supplyZones = supplyDemand!['supply_zones'] as List? ?? [];
+    final demandZones = supplyDemand!['demand_zones'] as List? ?? [];
+    final suggestion = supplyDemand!['suggestion'] ?? '';
+    final bias = supplyDemand!['bias'] ?? 'NEUTRAL';
+    
+    Color biasColor = bias == 'LONG' ? TV.green : (bias == 'SHORT' ? TV.red : TV.orange);
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: TV.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: TV.border)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('SUPPLY / DEMAND', style: TextStyle(fontSize: 12, color: TV.textDim, fontWeight: FontWeight.w600)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: biasColor.withOpacity(0.1), borderRadius: BorderRadius.circular(4), border: Border.all(color: biasColor)),
+                child: Text(bias, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: biasColor)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          // Suggestion
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: biasColor.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+            child: Text(suggestion, style: TextStyle(fontSize: 11, color: biasColor)),
+          ),
+          const SizedBox(height: 16),
+          
+          // Supply Zones
+          const Text('🔴 SUPPLY ZONES', style: TextStyle(fontSize: 10, color: TV.red, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          ...supplyZones.take(3).map((zone) => _buildZoneRow(zone, TV.red)),
+          
+          const SizedBox(height: 12),
+          
+          // Demand Zones
+          const Text('🟢 DEMAND ZONES', style: TextStyle(fontSize: 10, color: TV.green, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          ...demandZones.take(3).map((zone) => _buildZoneRow(zone, TV.green)),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildZoneRow(Map<String, dynamic> zone, Color color) {
+    final top = zone['zone_top'] ?? zone['top'] ?? 0;
+    final bottom = zone['zone_bottom'] ?? zone['bottom'] ?? 0;
+    final freshness = zone['freshness'] ?? 'TESTED';
+    final isFresh = freshness == 'FRESH';
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text('\$${_fmt(bottom)} - \$${_fmt(top)}', style: const TextStyle(fontSize: 11, color: TV.text, fontFamily: 'monospace')),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: isFresh ? TV.green.withOpacity(0.2) : TV.textMuted.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(freshness, style: TextStyle(fontSize: 9, color: isFresh ? TV.green : TV.textMuted)),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildFVGCard(Map<String, dynamic>? ict) {
+    final fvgs = ict?['fair_value_gaps'] as List? ?? [];
+    final orderBlocks = ict?['order_blocks'] as List? ?? [];
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: TV.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: TV.border)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('FVG & ORDER BLOCKS', style: TextStyle(fontSize: 12, color: TV.textDim, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 16),
+          
+          // FVGs
+          const Text('📊 FAIR VALUE GAPS', style: TextStyle(fontSize: 10, color: TV.cyan, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          
+          if (fvgs.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: TV.bg, borderRadius: BorderRadius.circular(6)),
+              child: const Text('Aktif FVG bulunamadı', style: TextStyle(fontSize: 11, color: TV.textMuted), textAlign: TextAlign.center),
+            )
+          else
+            ...fvgs.map((fvg) {
+              final isBullish = fvg['type'] == 'BULLISH_FVG';
+              final color = isBullish ? TV.green : TV.red;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: color.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Text(fvg['emoji'] ?? '', style: const TextStyle(fontSize: 14)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(isBullish ? 'Bullish FVG' : 'Bearish FVG', style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+                          Text('\$${_fmt(fvg['bottom'])} - \$${_fmt(fvg['top'])}', style: const TextStyle(fontSize: 10, color: TV.textDim)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          
+          const SizedBox(height: 16),
+          
+          // Order Blocks
+          const Text('🧱 ORDER BLOCKS', style: TextStyle(fontSize: 10, color: TV.purple, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          
+          if (orderBlocks.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: TV.bg, borderRadius: BorderRadius.circular(6)),
+              child: const Text('Aktif OB bulunamadı', style: TextStyle(fontSize: 11, color: TV.textMuted), textAlign: TextAlign.center),
+            )
+          else
+            ...orderBlocks.map((ob) {
+              final isBullish = ob['type'] == 'BULLISH_OB';
+              final color = isBullish ? TV.green : TV.red;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: color.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Text(ob['emoji'] ?? '', style: const TextStyle(fontSize: 14)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(isBullish ? 'Bullish OB' : 'Bearish OB', style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+                          Text('\$${_fmt(ob['low'])} - \$${_fmt(ob['high'])}', style: const TextStyle(fontSize: 10, color: TV.textDim)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildSolanaCard() {
+    if (solanaData == null) return const SizedBox();
+    
+    final analysis = solanaData!['analysis'] ?? {};
+    final price = analysis['current_price'] ?? 0;
+    final trend = analysis['trend'] ?? 'NEUTRAL';
+    final supplyZones = solanaData!['supply_demand']?['supply_zones'] as List? ?? [];
+    final demandZones = solanaData!['supply_demand']?['demand_zones'] as List? ?? [];
+    
+    Color trendColor = trend == 'BULLISH' ? TV.green : (trend == 'BEARISH' ? TV.red : TV.orange);
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: TV.card, 
+        borderRadius: BorderRadius.circular(12), 
+        border: Border.all(color: TV.purple, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: TV.purple.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                child: const Text('◎', style: TextStyle(fontSize: 24, color: TV.purple)),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('SOLANA (SOL)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: TV.text)),
+                  Text('Fiyat: \$${_fmt(price)}', style: const TextStyle(fontSize: 12, color: TV.textDim)),
+                ],
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(color: trendColor.withOpacity(0.1), borderRadius: BorderRadius.circular(6), border: Border.all(color: trendColor)),
+                child: Text(trend, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: trendColor)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('🔴 Supply Zones', style: TextStyle(fontSize: 10, color: TV.red)),
+                    const SizedBox(height: 4),
+                    ...supplyZones.take(2).map((z) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text('\$${_fmt(z['zone_bottom'])} - \$${_fmt(z['zone_top'])}', style: const TextStyle(fontSize: 10, color: TV.textDim)),
+                    )),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('🟢 Demand Zones', style: TextStyle(fontSize: 10, color: TV.green)),
+                    const SizedBox(height: 4),
+                    ...demandZones.take(2).map((z) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text('\$${_fmt(z['zone_bottom'])} - \$${_fmt(z['zone_top'])}', style: const TextStyle(fontSize: 10, color: TV.textDim)),
+                    )),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -471,211 +1183,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
   
-  Widget _buildHeader(Map<String, dynamic>? btc, Map<String, dynamic>? signal) {
-    final summary = btc?['summary'] ?? {};
-    final price = summary['current_price'] ?? 0;
-    final change = summary['total_change_percent'] ?? 0;
-    final direction = signal?['direction'] ?? 'WAIT';
-    Color changeColor = change >= 0 ? TV.green : TV.red;
-    
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: TV.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: TV.border)),
-      child: Row(
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(color: TV.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                child: const Text('₿', style: TextStyle(fontSize: 32, color: TV.orange)),
-              ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('BTC/USD', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: TV.text)),
-                  Text('Son 24 saat raporu', style: TextStyle(fontSize: 12, color: TV.textDim)),
-                ],
-              ),
-            ],
-          ),
-          const Spacer(),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('\$${_fmt(price)}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: TV.text)),
-              Row(
-                children: [
-                  Icon(change >= 0 ? Icons.arrow_upward : Icons.arrow_downward, color: changeColor, size: 16),
-                  Text(' ${change >= 0 ? '+' : ''}${change.toStringAsFixed(2)}%', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: changeColor)),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(width: 32),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            decoration: BoxDecoration(
-              color: direction == 'LONG' ? TV.greenBg : (direction == 'SHORT' ? TV.redBg : TV.orange.withOpacity(0.1)),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: direction == 'LONG' ? TV.green : (direction == 'SHORT' ? TV.red : TV.orange), width: 2),
-            ),
-            child: Column(
-              children: [
-                Text(direction == 'LONG' ? '🟢' : (direction == 'SHORT' ? '🔴' : '🟡'), style: const TextStyle(fontSize: 24)),
-                Text(direction, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: direction == 'LONG' ? TV.green : (direction == 'SHORT' ? TV.red : TV.orange))),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildPriceChart(Map<String, dynamic>? btc) {
-    final candles = btc?['candles'] as List? ?? [];
-    if (candles.isEmpty) return const SizedBox();
-    
-    // Min/Max bul
-    double minPrice = double.infinity;
-    double maxPrice = 0;
-    for (var c in candles) {
-      final low = (c['low'] ?? 0).toDouble();
-      final high = (c['high'] ?? 0).toDouble();
-      if (low < minPrice) minPrice = low;
-      if (high > maxPrice) maxPrice = high;
-    }
-    final range = maxPrice - minPrice;
-    
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: TV.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: TV.border)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('FİYAT GRAFİĞİ (Son 24 Saat)', style: TextStyle(fontSize: 12, color: TV.textDim, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 200,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: candles.map((c) {
-                final open = (c['open'] ?? 0).toDouble();
-                final close = (c['close'] ?? 0).toDouble();
-                final isBull = close >= open;
-                final height = ((close - minPrice) / range * 180).clamp(10.0, 180.0);
-                
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 1),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Container(
-                          height: height,
-                          decoration: BoxDecoration(
-                            color: isBull ? TV.green : TV.red,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('\$${_fmt(minPrice)}', style: const TextStyle(fontSize: 10, color: TV.textMuted)),
-              Text('\$${_fmt(maxPrice)}', style: const TextStyle(fontSize: 10, color: TV.textMuted)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildSignalsCard(Map<String, dynamic>? signal) {
-    final trendSignals = signal?['trend_signals'] as List? ?? [];
-    final ictSignals = signal?['ict_signals'] as List? ?? [];
-    
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: TV.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: TV.border)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('SİNYALLER', style: TextStyle(fontSize: 12, color: TV.textDim, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 16),
-          ...trendSignals.take(5).map((s) {
-            final isLong = s['type'] == 'LONG';
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Icon(isLong ? Icons.arrow_upward : Icons.arrow_downward, size: 14, color: isLong ? TV.green : TV.red),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(s['name'] ?? '', style: const TextStyle(fontSize: 11, color: TV.text))),
-                  Text('+${s['weight']}', style: TextStyle(fontSize: 10, color: isLong ? TV.green : TV.red)),
-                ],
-              ),
-            );
-          }).toList(),
-          if (ictSignals.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            const Divider(color: TV.border),
-            const SizedBox(height: 8),
-            ...ictSignals.map((s) => Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(s, style: const TextStyle(fontSize: 11, color: TV.blue)),
-            )).toList(),
-          ],
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildLevelsCard(Map<String, dynamic>? signal) {
-    final levels = signal?['levels'] ?? {};
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: TV.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: TV.border)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('DESTEK / DİRENÇ', style: TextStyle(fontSize: 12, color: TV.textDim, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 16),
-          _levelRow('R3', levels['resistance_3'], TV.red),
-          _levelRow('R2', levels['resistance_2'], TV.red),
-          _levelRow('R1', levels['resistance_1'], TV.red),
-          const Divider(color: TV.border, height: 24),
-          _levelRow('Pivot', levels['pivot'], TV.blue),
-          const Divider(color: TV.border, height: 24),
-          _levelRow('S1', levels['support_1'], TV.green),
-          _levelRow('S2', levels['support_2'], TV.green),
-          _levelRow('S3', levels['support_3'], TV.green),
-        ],
-      ),
-    );
-  }
-  
-  Widget _levelRow(String label, dynamic value, Color color) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
-          Text('\$${_fmt(value)}', style: const TextStyle(fontSize: 11, color: TV.text, fontFamily: 'monospace')),
-        ],
-      ),
-    );
-  }
-  
   Widget _buildMarketStructureCard(Map<String, dynamic>? ict) {
     final ms = ict?['market_structure'] ?? {};
     final trend = ms['trend'] ?? 'RANGING';
@@ -769,55 +1276,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
   
-  Widget _buildCandleTable(Map<String, dynamic>? btc) {
-    final candles = btc?['candles'] as List? ?? [];
-    
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: TV.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: TV.border)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('SON 24 SAAT MUM DETAYLARI', style: TextStyle(fontSize: 12, color: TV.textDim, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: TV.border))),
-            child: const Row(
-              children: [
-                SizedBox(width: 30),
-                SizedBox(width: 60, child: Text('SAAT', style: TextStyle(fontSize: 10, color: TV.textMuted))),
-                Expanded(child: Text('AÇILIŞ', textAlign: TextAlign.right, style: TextStyle(fontSize: 10, color: TV.textMuted))),
-                Expanded(child: Text('KAPANIŞ', textAlign: TextAlign.right, style: TextStyle(fontSize: 10, color: TV.textMuted))),
-                SizedBox(width: 70, child: Text('DEĞİŞİM', textAlign: TextAlign.right, style: TextStyle(fontSize: 10, color: TV.textMuted))),
-              ],
-            ),
-          ),
-          ...candles.map((c) {
-            final isBull = c['type'] == 'YESIL';
-            final color = isBull ? TV.green : TV.red;
-            final ts = (c['timestamp'] ?? '').toString();
-            final timeStr = ts.length >= 16 ? ts.substring(11, 16) : ts;
-            
-            return Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: TV.border, width: 0.3))),
-              child: Row(
-                children: [
-                  SizedBox(width: 30, child: Text(c['emoji'] ?? '', style: const TextStyle(fontSize: 12))),
-                  SizedBox(width: 60, child: Text(timeStr, style: const TextStyle(fontSize: 11, color: TV.text, fontFamily: 'monospace'))),
-                  Expanded(child: Text('\$${_fmt(c['open'])}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: TV.textDim, fontFamily: 'monospace'))),
-                  Expanded(child: Text('\$${_fmt(c['close'])}', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, color: color, fontFamily: 'monospace', fontWeight: FontWeight.w600))),
-                  SizedBox(width: 70, child: Text('${c['change_percent']?.toStringAsFixed(2)}%', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, color: color, fontFamily: 'monospace'))),
-                ],
-              ),
-            );
-          }).toList(),
-        ],
-      ),
-    );
-  }
-  
   String _fmt(dynamic v) {
     if (v == null) return '0';
     final n = v is int ? v.toDouble() : (v as double);
@@ -830,5 +1288,67 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-
-
+// Custom Candlestick Painter
+class CandlestickPainter extends CustomPainter {
+  final List candles;
+  final double minPrice;
+  final double range;
+  
+  CandlestickPainter(this.candles, this.minPrice, this.range);
+  
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (candles.isEmpty || range == 0) return;
+    
+    final candleWidth = size.width / candles.length;
+    final bodyWidth = candleWidth * 0.6;
+    final wickWidth = 1.5;
+    
+    for (var i = 0; i < candles.length; i++) {
+      final c = candles[i];
+      final open = (c['open'] ?? 0).toDouble();
+      final close = (c['close'] ?? 0).toDouble();
+      final high = (c['high'] ?? 0).toDouble();
+      final low = (c['low'] ?? 0).toDouble();
+      
+      final isBullish = close >= open;
+      final color = isBullish ? TV.green : TV.red;
+      
+      final x = i * candleWidth + candleWidth / 2;
+      
+      // Convert price to Y coordinate (inverted because canvas Y starts from top)
+      double priceToY(double price) => size.height - ((price - minPrice) / range * size.height);
+      
+      final openY = priceToY(open);
+      final closeY = priceToY(close);
+      final highY = priceToY(high);
+      final lowY = priceToY(low);
+      
+      // Draw wick
+      final wickPaint = Paint()
+        ..color = color
+        ..strokeWidth = wickWidth;
+      canvas.drawLine(Offset(x, highY), Offset(x, lowY), wickPaint);
+      
+      // Draw body
+      final bodyPaint = Paint()
+        ..color = color
+        ..style = isBullish ? PaintingStyle.fill : PaintingStyle.fill;
+      
+      final bodyTop = math.min(openY, closeY);
+      final bodyBottom = math.max(openY, closeY);
+      final bodyHeight = math.max(bodyBottom - bodyTop, 2.0);
+      
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight),
+          const Radius.circular(1),
+        ),
+        bodyPaint,
+      );
+    }
+  }
+  
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}

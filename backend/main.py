@@ -19,6 +19,7 @@ from analysis.strategy_analyzer import generate_trade_signal
 from analysis.backtester import backtest_strategy, get_real_confidence
 from analysis.supply_demand import find_all_zones
 from data.crypto_fetcher import get_crypto_candles, get_multi_crypto_summary, SUPPORTED_CRYPTOS
+from data.news_fetcher import get_full_news_report, get_crypto_news, get_fear_greed_index, get_market_sentiment
 
 # ============================================
 # FastAPI Uygulaması Oluştur
@@ -256,12 +257,16 @@ def full_report():
     else:
         signal['confidence_source'] = 'ESTIMATED'
     
+    # News ve Sentiment
+    news_report = get_full_news_report()
+    
     return {
         "generated_at": signal.get('generated_at'),
         "btc_report": btc_data,
         "ict_analysis": ict,
         "trade_signal": signal,
-        "backtest": backtest
+        "backtest": backtest,
+        "news": news_report
     }
 
 
@@ -331,6 +336,40 @@ def supply_demand(symbol: str, hours: int = 48):
         "current_price": data['summary'].get('current_price'),
         "zones": zones
     }
+
+
+@app.get("/news")
+def get_news():
+    """
+    Kripto ve piyasa haberleri döndürür.
+    - Son haberler
+    - Fear & Greed Index
+    - Önemli ekonomik eventler
+    - Piyasa sentiment'i
+    
+    Kullanım: GET http://localhost:8000/news
+    """
+    return get_full_news_report()
+
+
+@app.get("/fear-greed")
+def fear_greed():
+    """
+    Sadece Fear & Greed Index döndürür.
+    
+    Kullanım: GET http://localhost:8000/fear-greed
+    """
+    return get_fear_greed_index()
+
+
+@app.get("/sentiment")
+def sentiment():
+    """
+    Piyasa sentiment analizi döndürür.
+    
+    Kullanım: GET http://localhost:8000/sentiment
+    """
+    return get_market_sentiment()
 
 
 @app.get("/full-analysis/{symbol}")
