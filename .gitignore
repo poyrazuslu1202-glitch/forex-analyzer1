@@ -11,7 +11,6 @@ venv/
 # Flutter
 app/.dart_tool/
 app/.packages
-app/build/
 app/.flutter-plugins
 app/.flutter-plugins-dependencies
 

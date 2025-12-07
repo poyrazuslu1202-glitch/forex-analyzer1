@@ -51,7 +51,7 @@ class _HomePageState extends State<HomePage> {
   bool isLoading = false;
   Map<String, dynamic>? fullReport;
   String? error;
-  final String apiUrl = 'http://localhost:8000';
+  final String apiUrl = 'https://forex-analyzer1-cyhv.onrender.com';
 
   @override
   void initState() {
