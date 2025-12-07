@@ -92,6 +92,42 @@ IMPORTANT_EVENTS = {
 }
 
 
+def get_trump_crypto_news() -> List[Dict]:
+    """
+    Trump ve kripto ile ilgili haberleri çeker.
+    CryptoPanic API kullanır (ücretsiz).
+    """
+    formatted_news = []
+    
+    try:
+        # CryptoPanic - Trump/Politik haberler
+        url = "https://cryptopanic.com/api/v1/posts/?auth_token=free&filter=hot&currencies=BTC,SOL"
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            results = data.get('results', [])[:5]
+            
+            for news in results:
+                title = news.get('title', '').lower()
+                # Trump, politika veya önemli haberler
+                is_important = any(word in title for word in ['trump', 'biden', 'fed', 'sec', 'regulation', 'etf', 'elon', 'musk'])
+                
+                formatted_news.append({
+                    "title": news.get('title', ''),
+                    "source": news.get('source', {}).get('title', 'Unknown'),
+                    "url": news.get('url', ''),
+                    "emoji": "🇺🇸" if is_important else "📰",
+                    "is_political": is_important,
+                    "published": news.get('published_at', ''),
+                    "votes": news.get('votes', {})
+                })
+    except Exception as e:
+        print(f"Trump/Politik haber hatası: {e}")
+    
+    return formatted_news
+
+
 def get_crypto_news() -> List[Dict]:
     """
     CryptoCompare'den kripto haberlerini çeker.
@@ -281,6 +317,7 @@ def get_full_news_report() -> Dict:
     """
     return {
         "crypto_news": get_crypto_news(),
+        "political_news": get_trump_crypto_news(),
         "fear_greed": get_fear_greed_index(),
         "important_events": get_important_events_today(),
         "market_sentiment": get_market_sentiment(),

@@ -7,7 +7,7 @@ from typing import Dict, List
 from datetime import datetime
 import statistics
 
-def backtest_strategy(candles: List[Dict], lookback: int = 5) -> Dict:
+def backtest_strategy(candles: List[Dict], lookback: int = 5, min_trades: int = 50) -> Dict:
     """
     Geçmiş verilerle strateji backtest yapar.
     
