@@ -233,8 +233,8 @@ def full_report():
     Tam rapor - Tüm analizler tek endpoint'te.
     Artık GERÇEK backtest istatistikleri içeriyor!
     """
-    # 24 saatlik veri
-    btc_data = get_btc_candles(hours=24)
+    # 168 saatlik veri (1 hafta) - en az 50 trade için
+    btc_data = get_btc_candles(hours=168)
     
     if not btc_data.get('success'):
         return {"error": "Veri alınamadı", "details": btc_data.get('error')}

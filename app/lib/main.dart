@@ -569,11 +569,24 @@ class _HomePageState extends State<HomePage> {
           ),
           const SizedBox(height: 20),
           
-          // Son sinyaller
+          // Son sinyaller - Dropdown ile genişletilebilir
           if (recentSignals.isNotEmpty) ...[
-            const Text('📜 SON SİNYALLER', style: TextStyle(fontSize: 10, color: TV.textDim, fontWeight: FontWeight.w600)),
+            Row(
+              children: [
+                const Text('📜 SİNYAL GEÇMİŞİ', style: TextStyle(fontSize: 10, color: TV.textDim, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: TV.purple.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text('${recentSignals.length} kayıt', style: const TextStyle(fontSize: 9, color: TV.purple)),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
-            ...recentSignals.take(5).map((s) {
+            ...recentSignals.take(10).map((s) {
               final direction = s['direction'] ?? 'WAIT';
               final status = s['status'] ?? 'PENDING';
               final confidence = s['confidence'] ?? 0;
@@ -583,29 +596,60 @@ class _HomePageState extends State<HomePage> {
               Color statusColor = status == 'WIN' ? TV.green : (status == 'LOSS' ? TV.red : TV.orange);
               String statusEmoji = status == 'WIN' ? '✅' : (status == 'LOSS' ? '❌' : '⏳');
               
+              // Tarih bilgisi
+              String timeStr = '';
+              try {
+                final ts = s['timestamp'] ?? '';
+                if (ts.toString().isNotEmpty) {
+                  timeStr = ts.toString().substring(5, 16).replaceAll('T', ' ');
+                }
+              } catch (_) {}
+              
+              final entryPrice = s['entry_price'] ?? 0;
+              final pnl = s['pnl_percent'];
+              
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: TV.bg,
+                  color: status == 'WIN' ? TV.green.withOpacity(0.05) : (status == 'LOSS' ? TV.red.withOpacity(0.05) : TV.bg),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: status == 'WIN' ? TV.green.withOpacity(0.3) : (status == 'LOSS' ? TV.red.withOpacity(0.3) : TV.border)),
                 ),
-                child: Row(
+                child: Column(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(color: dirColor.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-                      child: Text(direction, style: TextStyle(fontSize: 10, color: dirColor, fontWeight: FontWeight.bold)),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: dirColor.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                          child: Text(direction, style: TextStyle(fontSize: 10, color: dirColor, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(crypto, style: const TextStyle(fontSize: 11, color: TV.text, fontWeight: FontWeight.w600)),
+                        const Spacer(),
+                        Text(statusEmoji, style: const TextStyle(fontSize: 16)),
+                        const SizedBox(width: 4),
+                        Text(status, style: TextStyle(fontSize: 11, color: statusColor, fontWeight: FontWeight.bold)),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Text(crypto, style: const TextStyle(fontSize: 11, color: TV.text)),
-                    const Spacer(),
-                    Text('%${confidence.toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, color: TV.textDim)),
-                    const SizedBox(width: 12),
-                    Text(statusEmoji, style: const TextStyle(fontSize: 14)),
-                    const SizedBox(width: 4),
-                    Text(status, style: TextStyle(fontSize: 10, color: statusColor, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text('📅 $timeStr', style: const TextStyle(fontSize: 9, color: TV.textMuted)),
+                        const Spacer(),
+                        Text('Giriş: \$${_fmt(entryPrice)}', style: const TextStyle(fontSize: 9, color: TV.textDim)),
+                        const SizedBox(width: 12),
+                        Text('Güven: %${confidence.toStringAsFixed(0)}', style: const TextStyle(fontSize: 9, color: TV.textDim)),
+                        if (pnl != null) ...[
+                          const SizedBox(width: 12),
+                          Text(
+                            'PnL: ${pnl >= 0 ? '+' : ''}${pnl.toStringAsFixed(2)}%',
+                            style: TextStyle(fontSize: 9, color: pnl >= 0 ? TV.green : TV.red, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
               );
@@ -635,18 +679,55 @@ class _HomePageState extends State<HomePage> {
   }
   
   Widget _buildPoliticalNews(List politicalNews) {
-    if (politicalNews.isEmpty) return const SizedBox();
-    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Row(
+        Row(
           children: [
-            Text('🇺🇸', style: TextStyle(fontSize: 16)),
-            SizedBox(width: 6),
-            Text('POLİTİK & TRUMP HABERLERİ', style: TextStyle(fontSize: 10, color: TV.orange, fontWeight: FontWeight.w600)),
+            const Text('🇺🇸', style: TextStyle(fontSize: 16)),
+            const SizedBox(width: 6),
+            const Text('POLİTİK & TRUMP HABERLERİ', style: TextStyle(fontSize: 10, color: TV.orange, fontWeight: FontWeight.w600)),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: TV.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: TV.red.withOpacity(0.3)),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.info_outline, size: 10, color: TV.red),
+                  SizedBox(width: 4),
+                  Text('Twitter API \$100+/ay', style: TextStyle(fontSize: 8, color: TV.red)),
+                ],
+              ),
+            ),
           ],
         ),
+        const SizedBox(height: 8),
+        if (politicalNews.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: TV.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: TV.orange.withOpacity(0.3)),
+            ),
+            child: const Column(
+              children: [
+                Text('⚠️ Twitter/X API Ücretli', style: TextStyle(fontSize: 11, color: TV.orange, fontWeight: FontWeight.w600)),
+                SizedBox(height: 4),
+                Text(
+                  'Gerçek zamanlı Trump tweet\'leri için Twitter API gerekli (\$100+/ay). Şimdilik politik haber API\'lerinden veri çekiliyor.',
+                  style: TextStyle(fontSize: 10, color: TV.textDim),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
         const SizedBox(height: 12),
         ...politicalNews.take(3).map((n) => Container(
           margin: const EdgeInsets.only(bottom: 8),
