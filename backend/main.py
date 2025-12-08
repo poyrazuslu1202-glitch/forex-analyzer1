@@ -22,7 +22,6 @@ from data.crypto_fetcher import get_crypto_candles, get_multi_crypto_summary, SU
 from data.news_fetcher import get_full_news_report, get_crypto_news, get_fear_greed_index, get_market_sentiment
 from analysis.killzone_strategy import get_full_killzone_analysis, get_active_killzone_strategy, KILLZONE_BEHAVIORS
 from analysis.trade_journal import record_signal, verify_past_signals, get_journal_stats, get_signal_history, clear_journal
-from data.market_data import get_full_market_report, get_top_cryptos, get_economic_calendar, get_global_market_data, get_trending_coins
 
 # ============================================
 # FastAPI Uygulaması Oluştur
@@ -234,8 +233,8 @@ def full_report():
     Tam rapor - Tüm analizler tek endpoint'te.
     Artık GERÇEK backtest istatistikleri içeriyor!
     """
-    # 168 saatlik veri (1 hafta) - en az 50 trade için
-    btc_data = get_btc_candles(hours=168)
+    # 24 saatlik veri
+    btc_data = get_btc_candles(hours=24)
     
     if not btc_data.get('success'):
         return {"error": "Veri alınamadı", "details": btc_data.get('error')}
@@ -473,66 +472,17 @@ def journal_clear():
     return clear_journal()
 
 
-# ============================================
-# MARKET DATA ENDPOINTS
-# ============================================
-
-@app.get("/market")
-def market_data():
-    """
-    Tam piyasa raporu - Top Coins, Trending, Calendar.
-    
-    Kullanım: GET http://localhost:8000/market
-    """
-    return get_full_market_report()
-
-
-@app.get("/market/top")
-def top_coins():
-    """
-    Top 20 kripto para.
-    
-    Kullanım: GET http://localhost:8000/market/top
-    """
-    return {
-        "coins": get_top_cryptos(),
-        "global": get_global_market_data()
-    }
-
-
-@app.get("/market/trending")
-def trending():
-    """
-    Trend olan coinler.
-    
-    Kullanım: GET http://localhost:8000/market/trending
-    """
-    return {"trending": get_trending_coins()}
-
-
-@app.get("/market/calendar")
-def economic_calendar():
-    """
-    Ekonomik takvim.
-    
-    Kullanım: GET http://localhost:8000/market/calendar
-    """
-    return get_economic_calendar()
-
-
 @app.get("/full-analysis/{symbol}")
-def full_analysis(symbol: str, hours: int = 168):
+def full_analysis(symbol: str, hours: int = 24):
     """
     Tek bir kripto için TÜM analizler.
     - Mum verileri
     - ICT analizi
     - Supply/Demand zones
     - Trade sinyali
-    - Backtest (50+ trade)
-    - Kill Zone Strategy
-    - Journal
+    - Backtest
     """
-    # Kripto verisini çek (168 saat = 1 hafta, 50+ trade için)
+    # Kripto verisini çek
     crypto_data = get_crypto_candles(symbol.upper(), hours=hours)
     
     if not crypto_data.get('success'):
@@ -544,37 +494,12 @@ def full_analysis(symbol: str, hours: int = 168):
     ict = get_ict_analysis(candles)
     zones = find_all_zones(candles)
     signal = generate_trade_signal(candles, ict)
-    backtest = backtest_strategy(candles, min_trades=50)
-    killzone = get_full_killzone_analysis(candles)
+    backtest = backtest_strategy(candles)
     
     # Gerçek güven oranı
     if backtest.get('success'):
         signal['confidence'] = get_real_confidence(backtest, signal.get('direction', 'WAIT'))
         signal['confidence_source'] = 'BACKTEST'
-        signal['backtest_trades'] = backtest.get('total_trades', 0)
-    
-    # Geçmiş sinyalleri doğrula
-    current_price = candles[-1]['close'] if candles else 0
-    verify_past_signals(current_price, symbol.upper())
-    
-    # Yeni sinyali kaydet
-    if signal.get('direction') != 'WAIT':
-        trade_plan = signal.get('trade_plan', {})
-        recorded = record_signal(
-            crypto=symbol.upper(),
-            direction=signal.get('direction', 'WAIT'),
-            confidence=signal.get('confidence', 50),
-            entry_price=trade_plan.get('entry_price', current_price),
-            stop_loss=trade_plan.get('stop_loss', 0),
-            take_profit_1=trade_plan.get('take_profit_1', 0),
-            take_profit_2=trade_plan.get('take_profit_2', 0),
-            ict_analysis=ict,
-            backtest_stats=backtest
-        )
-        signal['journal_id'] = recorded.get('id')
-    
-    # Journal istatistikleri
-    journal_stats = get_journal_stats()
     
     return {
         "crypto": symbol.upper(),
@@ -585,9 +510,7 @@ def full_analysis(symbol: str, hours: int = 168):
         "ict_analysis": ict,
         "supply_demand": zones,
         "trade_signal": signal,
-        "backtest": backtest,
-        "killzone_strategy": killzone,
-        "journal": journal_stats
+        "backtest": backtest
     }
 
 

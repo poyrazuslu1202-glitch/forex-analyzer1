@@ -55,11 +55,9 @@ class _HomePageState extends State<HomePage> {
   Map<String, dynamic>? fullReport;
   Map<String, dynamic>? supplyDemand;
   Map<String, dynamic>? solanaData;
-  Map<String, dynamic>? marketData;
   String? error;
   final String apiUrl = 'https://forex-analyzer1-cyhv.onrender.com';
   String selectedCrypto = 'BTC'; // BTC veya SOL
-  int currentPage = 0; // 0 = Analiz, 1 = Market
 
   @override
   void initState() {
@@ -76,7 +74,6 @@ class _HomePageState extends State<HomePage> {
         http.get(Uri.parse('$apiUrl/full-report')),
         http.get(Uri.parse('$apiUrl/supply-demand/BTC')),
         http.get(Uri.parse('$apiUrl/full-analysis/SOL')),
-        http.get(Uri.parse('$apiUrl/market')),
       ]);
       
       if (responses[0].statusCode == 200) {
@@ -88,9 +85,6 @@ class _HomePageState extends State<HomePage> {
       if (responses[2].statusCode == 200) {
         solanaData = json.decode(responses[2].body);
       }
-      if (responses[3].statusCode == 200) {
-        marketData = json.decode(responses[3].body);
-      }
       
       setState(() { isLoading = false; });
     } catch (e) {
@@ -100,12 +94,175 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 800;
+    
+    if (isMobile) {
+      return Scaffold(
+        backgroundColor: TV.bg,
+        appBar: AppBar(
+          backgroundColor: TV.card,
+          elevation: 0,
+          title: const Row(
+            children: [
+              Text('📊', style: TextStyle(fontSize: 20)),
+              SizedBox(width: 8),
+              Text('FOREX ANALYZER', style: TextStyle(fontSize: 14, color: TV.text)),
+            ],
+          ),
+          actions: [
+            IconButton(
+              icon: isLoading 
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: TV.blue))
+                : const Icon(Icons.refresh, color: TV.blue),
+              onPressed: isLoading ? null : _fetchData,
+            ),
+          ],
+        ),
+        body: _buildMobileContent(),
+      );
+    }
+    
     return Scaffold(
       backgroundColor: TV.bg,
       body: Row(
         children: [
           _buildLeftPanel(),
-          Expanded(child: currentPage == 0 ? _buildMainContent() : _buildMarketPage()),
+          Expanded(child: _buildMainContent()),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildMobileContent() {
+    if (error != null) {
+      return Center(child: Text(error!, style: const TextStyle(color: TV.red)));
+    }
+    if (isLoading || fullReport == null) {
+      return const Center(child: CircularProgressIndicator(color: TV.blue));
+    }
+    
+    final btc = fullReport!['btc_report'];
+    final bool isSol = selectedCrypto == 'SOL' && solanaData != null;
+    
+    Map<String, dynamic>? signal;
+    Map<String, dynamic>? chartData;
+    if (isSol) {
+      signal = solanaData?['trade_signal'];
+      chartData = solanaData?['report'];
+    } else {
+      signal = fullReport?['trade_signal'];
+      chartData = btc;
+    }
+    
+    final summary = chartData?['summary'] ?? {};
+    final price = (summary['current_price'] ?? 0).toDouble();
+    final change = (summary['total_change_percent'] ?? 0).toDouble();
+    final direction = signal?['direction'] ?? 'WAIT';
+    final confidence = (signal?['confidence'] ?? 50).toDouble();
+    final plan = signal?['trade_plan'] ?? {};
+    
+    Color dirColor = direction == 'LONG' ? TV.green : (direction == 'SHORT' ? TV.red : TV.orange);
+    
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // Crypto Selector
+          Row(
+            children: [
+              Expanded(child: _buildMobileCryptoBtn('BTC', '₿', TV.orange)),
+              const SizedBox(width: 8),
+              Expanded(child: _buildMobileCryptoBtn('SOL', '◎', TV.purple)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          // Sinyal Kartı
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: dirColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: dirColor, width: 2),
+            ),
+            child: Column(
+              children: [
+                Text(direction == 'LONG' ? '🟢' : (direction == 'SHORT' ? '🔴' : '🟡'), style: const TextStyle(fontSize: 48)),
+                Text(direction, style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: dirColor)),
+                const SizedBox(height: 8),
+                Text('$selectedCrypto/USD', style: const TextStyle(fontSize: 14, color: TV.textDim)),
+                Text('\$${_fmt(price)}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: TV.text)),
+                Text('${change >= 0 ? '+' : ''}${change.toStringAsFixed(2)}%', style: TextStyle(color: change >= 0 ? TV.green : TV.red)),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Text('GÜVEN ', style: TextStyle(fontSize: 10, color: TV.textDim)),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(value: confidence / 100, backgroundColor: TV.border, valueColor: AlwaysStoppedAnimation<Color>(dirColor), minHeight: 8),
+                      ),
+                    ),
+                    Text(' %${confidence.toStringAsFixed(0)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: dirColor)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          // Trade Plan
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: TV.card, borderRadius: BorderRadius.circular(12)),
+            child: Column(
+              children: [
+                _mobileRow('Giriş', '\$${_fmt(plan['entry_price'])}', TV.text),
+                _mobileRow('Stop Loss', '\$${_fmt(plan['stop_loss'])}', TV.red),
+                _mobileRow('TP1', '\$${_fmt(plan['take_profit_1'])}', TV.green),
+                _mobileRow('TP2', '\$${_fmt(plan['take_profit_2'])}', TV.green),
+                _mobileRow('R/R', '${plan['risk_reward'] ?? 0}', TV.blue),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildMobileCryptoBtn(String crypto, String symbol, Color color) {
+    final isSelected = selectedCrypto == crypto;
+    return GestureDetector(
+      onTap: () => setState(() => selectedCrypto = crypto),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.2) : TV.card,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: isSelected ? color : TV.border),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(symbol, style: TextStyle(fontSize: 20, color: isSelected ? color : TV.textDim)),
+            const SizedBox(width: 8),
+            Text(crypto, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isSelected ? color : TV.textDim)),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _mobileRow(String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: TV.textDim)),
+          Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: color)),
         ],
       ),
     );
@@ -126,128 +283,59 @@ class _HomePageState extends State<HomePage> {
     }
     
     return Container(
-      width: 280,
+      width: 320,
       decoration: const BoxDecoration(
         color: TV.card,
         border: Border(right: BorderSide(color: TV.border)),
       ),
       child: Column(
         children: [
-          // Header - Kompakt
+          // Header
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(20),
             decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: TV.border))),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: TV.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                  child: const Text('📊', style: TextStyle(fontSize: 18)),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: TV.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                  child: const Text('📊', style: TextStyle(fontSize: 24)),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('FOREX ANALYZER', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: TV.text, letterSpacing: 1)),
-                    Text('ICT Strategy Pro', style: TextStyle(fontSize: 10, color: TV.textDim)),
+                    Text('FOREX ANALYZER', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: TV.text, letterSpacing: 1)),
+                    Text('ICT Strategy Pro', style: TextStyle(fontSize: 11, color: TV.textDim)),
                   ],
                 ),
               ],
             ),
           ),
           
-          // Sayfa Seçici - Dropdown
-          _buildPageSelector(),
+          // Crypto Selector
+          _buildCryptoSelector(),
           
-          // Yenile butonu - EN ÜSTTE ve her zaman görünür
+          if (signal != null) _buildMainSignalCard(signal),
+          if (ict != null) _buildKillZonesPanel(ict['kill_zones']),
+          
+          const Spacer(),
+          
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.all(16),
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: isLoading ? null : _fetchData,
                 icon: isLoading 
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.refresh, size: 16),
-                label: Text(isLoading ? 'Yükleniyor...' : 'YENİLE', style: const TextStyle(fontSize: 12)),
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.refresh, size: 18),
+                label: Text(isLoading ? 'Analiz ediliyor...' : 'YENİLE'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: TV.blue,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ),
-          ),
-          
-          // Crypto Selector (sadece Analiz sayfasında)
-          if (currentPage == 0) _buildCryptoSelector(),
-          
-          // Scrollable content
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  if (signal != null) _buildMainSignalCard(signal),
-                  if (ict != null) _buildKillZonesPanel(ict['kill_zones']),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildPageSelector() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: TV.bg,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: TV.border),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => currentPage = 0),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: currentPage == 0 ? TV.blue.withOpacity(0.2) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: currentPage == 0 ? TV.blue : Colors.transparent),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.analytics, size: 14, color: currentPage == 0 ? TV.blue : TV.textDim),
-                    const SizedBox(width: 4),
-                    Text('ANALİZ', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: currentPage == 0 ? TV.blue : TV.textDim)),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => currentPage = 1),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: currentPage == 1 ? TV.green.withOpacity(0.2) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: currentPage == 1 ? TV.green : Colors.transparent),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.show_chart, size: 14, color: currentPage == 1 ? TV.green : TV.textDim),
-                    const SizedBox(width: 4),
-                    Text('MARKET', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: currentPage == 1 ? TV.green : TV.textDim)),
-                  ],
                 ),
               ),
             ),
@@ -513,8 +601,6 @@ class _HomePageState extends State<HomePage> {
     final Map<String, dynamic>? signal = isSol ? solanaData!['trade_signal'] : fullReport!['trade_signal'];
     final Map<String, dynamic>? ict = isSol ? solanaData!['ict_analysis'] : fullReport!['ict_analysis'];
     final Map<String, dynamic>? backtest = isSol ? solanaData!['backtest'] : fullReport!['backtest'];
-    final Map<String, dynamic>? killzone = isSol ? solanaData!['killzone_strategy'] : fullReport!['killzone_strategy'];
-    final Map<String, dynamic>? journal = isSol ? solanaData!['journal'] : fullReport!['journal'];
     
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -551,9 +637,9 @@ class _HomePageState extends State<HomePage> {
           
           _buildBacktestCard(backtest),
           const SizedBox(height: 24),
-          _buildKillZoneStrategyCard(killzone),
+          _buildKillZoneStrategyCard(fullReport!['killzone_strategy']),
           const SizedBox(height: 24),
-          _buildJournalCard(journal),
+          _buildJournalCard(fullReport!['journal']),
           const SizedBox(height: 24),
           _buildNewsCard(fullReport!['news']),
         ],
@@ -646,41 +732,9 @@ class _HomePageState extends State<HomePage> {
           ),
           const SizedBox(height: 20),
           
-          // Son sinyaller - Tümünü göster butonu ile
+          // Son sinyaller
           if (recentSignals.isNotEmpty) ...[
-            Row(
-              children: [
-                const Text('📜 SİNYAL GEÇMİŞİ', style: TextStyle(fontSize: 10, color: TV.textDim, fontWeight: FontWeight.w600)),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: TV.purple.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text('${recentSignals.length} kayıt', style: const TextStyle(fontSize: 9, color: TV.purple)),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () => _showFullHistory(context, recentSignals),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: TV.blue,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.history, size: 12, color: Colors.white),
-                        SizedBox(width: 4),
-                        Text('TÜMÜNÜ GÖR', style: TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            const Text('📜 SON SİNYALLER', style: TextStyle(fontSize: 10, color: TV.textDim, fontWeight: FontWeight.w600)),
             const SizedBox(height: 12),
             ...recentSignals.take(5).map((s) {
               final direction = s['direction'] ?? 'WAIT';
@@ -692,60 +746,29 @@ class _HomePageState extends State<HomePage> {
               Color statusColor = status == 'WIN' ? TV.green : (status == 'LOSS' ? TV.red : TV.orange);
               String statusEmoji = status == 'WIN' ? '✅' : (status == 'LOSS' ? '❌' : '⏳');
               
-              // Tarih bilgisi
-              String timeStr = '';
-              try {
-                final ts = s['timestamp'] ?? '';
-                if (ts.toString().isNotEmpty) {
-                  timeStr = ts.toString().substring(5, 16).replaceAll('T', ' ');
-                }
-              } catch (_) {}
-              
-              final entryPrice = s['entry_price'] ?? 0;
-              final pnl = s['pnl_percent'];
-              
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: status == 'WIN' ? TV.green.withOpacity(0.05) : (status == 'LOSS' ? TV.red.withOpacity(0.05) : TV.bg),
+                  color: TV.bg,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: status == 'WIN' ? TV.green.withOpacity(0.3) : (status == 'LOSS' ? TV.red.withOpacity(0.3) : TV.border)),
                 ),
-                child: Column(
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(color: dirColor.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-                          child: Text(direction, style: TextStyle(fontSize: 10, color: dirColor, fontWeight: FontWeight.bold)),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(crypto, style: const TextStyle(fontSize: 11, color: TV.text, fontWeight: FontWeight.w600)),
-                        const Spacer(),
-                        Text(statusEmoji, style: const TextStyle(fontSize: 16)),
-                        const SizedBox(width: 4),
-                        Text(status, style: TextStyle(fontSize: 11, color: statusColor, fontWeight: FontWeight.bold)),
-                      ],
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(color: dirColor.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                      child: Text(direction, style: TextStyle(fontSize: 10, color: dirColor, fontWeight: FontWeight.bold)),
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Text('📅 $timeStr', style: const TextStyle(fontSize: 9, color: TV.textMuted)),
-                        const Spacer(),
-                        Text('Giriş: \$${_fmt(entryPrice)}', style: const TextStyle(fontSize: 9, color: TV.textDim)),
-                        const SizedBox(width: 12),
-                        Text('Güven: %${confidence.toStringAsFixed(0)}', style: const TextStyle(fontSize: 9, color: TV.textDim)),
-                        if (pnl != null) ...[
-                          const SizedBox(width: 12),
-                          Text(
-                            'PnL: ${pnl >= 0 ? '+' : ''}${pnl.toStringAsFixed(2)}%',
-                            style: TextStyle(fontSize: 9, color: pnl >= 0 ? TV.green : TV.red, fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ],
-                    ),
+                    const SizedBox(width: 8),
+                    Text(crypto, style: const TextStyle(fontSize: 11, color: TV.text)),
+                    const Spacer(),
+                    Text('%${confidence.toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, color: TV.textDim)),
+                    const SizedBox(width: 12),
+                    Text(statusEmoji, style: const TextStyle(fontSize: 14)),
+                    const SizedBox(width: 4),
+                    Text(status, style: TextStyle(fontSize: 10, color: statusColor, fontWeight: FontWeight.w600)),
                   ],
                 ),
               );
@@ -771,6 +794,74 @@ class _HomePageState extends State<HomePage> {
           Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
         ],
       ),
+    );
+  }
+  
+  Widget _buildPoliticalNews(List politicalNews) {
+    if (politicalNews.isEmpty) return const SizedBox();
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Text('🇺🇸', style: TextStyle(fontSize: 16)),
+            SizedBox(width: 6),
+            Text('POLİTİK & TRUMP HABERLERİ', style: TextStyle(fontSize: 10, color: TV.orange, fontWeight: FontWeight.w600)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ...politicalNews.take(3).map((n) => Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: n['is_political'] == true ? TV.orange.withOpacity(0.1) : TV.bg,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: n['is_political'] == true ? TV.orange.withOpacity(0.5) : TV.border),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(n['emoji'] ?? '📰', style: const TextStyle(fontSize: 20)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      n['title'] ?? '', 
+                      style: TextStyle(
+                        fontSize: 12, 
+                        color: n['is_political'] == true ? TV.orange : TV.text, 
+                        fontWeight: n['is_political'] == true ? FontWeight.w600 : FontWeight.w500,
+                      ), 
+                      maxLines: 2, 
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(n['source'] ?? '', style: const TextStyle(fontSize: 10, color: TV.blue)),
+                        if (n['is_political'] == true) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: TV.orange,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text('HOT', style: TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        )),
+      ],
     );
   }
   
@@ -1247,6 +1338,10 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
           const SizedBox(height: 12),
+          
+          // Politik/Trump Haberler
+          _buildPoliticalNews(news['political_news'] as List? ?? []),
+          const SizedBox(height: 16),
           
           if (cryptoNews.isEmpty)
             Container(
@@ -1911,437 +2006,6 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-    );
-  }
-  
-  Widget _buildMarketPage() {
-    if (marketData == null) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(color: TV.blue),
-            SizedBox(height: 16),
-            Text('Market verisi yükleniyor...', style: TextStyle(color: TV.textDim)),
-          ],
-        ),
-      );
-    }
-    
-    final globalData = marketData!['global_data'] ?? {};
-    final topCryptos = marketData!['top_cryptos'] as List? ?? [];
-    final trending = marketData!['trending'] as List? ?? [];
-    final calendar = marketData!['economic_calendar'] ?? {};
-    final upcomingEvents = calendar['upcoming_events'] as List? ?? [];
-    
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Global Market Header
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: TV.card,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: TV.green, width: 2),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Icon(Icons.public, color: TV.green, size: 24),
-                    SizedBox(width: 12),
-                    Text('GLOBAL KRİPTO PİYASASI', style: TextStyle(fontSize: 16, color: TV.green, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(child: _buildGlobalStat('Toplam Market Cap', '\$${_formatBigNumber(globalData['total_market_cap'] ?? 0)}', TV.blue)),
-                    const SizedBox(width: 16),
-                    Expanded(child: _buildGlobalStat('24s Hacim', '\$${_formatBigNumber(globalData['total_volume'] ?? 0)}', TV.purple)),
-                    const SizedBox(width: 16),
-                    Expanded(child: _buildGlobalStat('BTC Dominance', '%${globalData['btc_dominance'] ?? 0}', TV.orange)),
-                    const SizedBox(width: 16),
-                    Expanded(child: _buildGlobalStat('24s Değişim', '%${globalData['market_cap_change_24h'] ?? 0}', 
-                      (globalData['market_cap_change_24h'] ?? 0) >= 0 ? TV.green : TV.red)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          
-          // Two Column Layout
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Top Cryptos
-              Expanded(
-                flex: 2,
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: TV.card,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: TV.border),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.leaderboard, color: TV.blue, size: 20),
-                          SizedBox(width: 8),
-                          Text('TOP 20 KRİPTO', style: TextStyle(fontSize: 14, color: TV.blue, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // Header
-                      Container(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                        decoration: BoxDecoration(color: TV.bg, borderRadius: BorderRadius.circular(6)),
-                        child: const Row(
-                          children: [
-                            SizedBox(width: 30, child: Text('#', style: TextStyle(fontSize: 10, color: TV.textMuted))),
-                            SizedBox(width: 60, child: Text('COIN', style: TextStyle(fontSize: 10, color: TV.textMuted))),
-                            Expanded(child: Text('FİYAT', style: TextStyle(fontSize: 10, color: TV.textMuted))),
-                            SizedBox(width: 70, child: Text('24S', style: TextStyle(fontSize: 10, color: TV.textMuted))),
-                            SizedBox(width: 100, child: Text('MARKET CAP', style: TextStyle(fontSize: 10, color: TV.textMuted))),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ...topCryptos.map((coin) {
-                        final change = (coin['change_24h'] ?? 0).toDouble();
-                        return Container(
-                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                          margin: const EdgeInsets.only(bottom: 4),
-                          decoration: BoxDecoration(
-                            color: topCryptos.indexOf(coin) % 2 == 0 ? TV.bg : Colors.transparent,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Row(
-                            children: [
-                              SizedBox(width: 30, child: Text('${coin['rank']}', style: const TextStyle(fontSize: 11, color: TV.textDim))),
-                              SizedBox(width: 60, child: Text(coin['symbol'] ?? '', style: const TextStyle(fontSize: 11, color: TV.text, fontWeight: FontWeight.bold))),
-                              Expanded(child: Text('\$${_fmt(coin['price'])}', style: const TextStyle(fontSize: 11, color: TV.text))),
-                              SizedBox(
-                                width: 70,
-                                child: Text(
-                                  '${change >= 0 ? '+' : ''}${change.toStringAsFixed(2)}%',
-                                  style: TextStyle(fontSize: 11, color: change >= 0 ? TV.green : TV.red, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                              SizedBox(width: 100, child: Text('\$${_formatBigNumber(coin['market_cap'] ?? 0)}', style: const TextStyle(fontSize: 10, color: TV.textDim))),
-                            ],
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              
-              // Right Column - Trending + Calendar
-              Expanded(
-                child: Column(
-                  children: [
-                    // Trending
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: TV.card,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: TV.orange, width: 2),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Row(
-                            children: [
-                              Text('🔥', style: TextStyle(fontSize: 18)),
-                              SizedBox(width: 8),
-                              Text('TREND', style: TextStyle(fontSize: 14, color: TV.orange, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          ...trending.take(7).map((coin) => Container(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: TV.border, width: 0.5))),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 24, height: 24,
-                                  decoration: BoxDecoration(color: TV.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                                  child: Center(child: Text('${trending.indexOf(coin) + 1}', style: const TextStyle(fontSize: 10, color: TV.orange))),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(coin['symbol'] ?? '', style: const TextStyle(fontSize: 12, color: TV.text, fontWeight: FontWeight.bold)),
-                                      Text(coin['name'] ?? '', style: const TextStyle(fontSize: 9, color: TV.textDim)),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // Economic Calendar
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: TV.card,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: TV.red, width: 2),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Row(
-                            children: [
-                              Icon(Icons.event, color: TV.red, size: 20),
-                              SizedBox(width: 8),
-                              Text('EKONOMİK TAKVİM', style: TextStyle(fontSize: 14, color: TV.red, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          ...upcomingEvents.take(5).map((event) {
-                            final impact = event['impact'] ?? 'MEDIUM';
-                            Color impactColor = impact == 'HIGH' ? TV.red : TV.orange;
-                            
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: impactColor.withOpacity(0.05),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: impactColor.withOpacity(0.3)),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(event['country'] ?? '🌍', style: const TextStyle(fontSize: 16)),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(event['event'] ?? '', style: const TextStyle(fontSize: 11, color: TV.text, fontWeight: FontWeight.bold)),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(color: impactColor, borderRadius: BorderRadius.circular(4)),
-                                        child: Text(impact, style: const TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold)),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Row(
-                                    children: [
-                                      Text('📅 ${event['date']} ${event['time']}', style: const TextStyle(fontSize: 9, color: TV.textDim)),
-                                      const Spacer(),
-                                      Text('${event['days_until']} gün', style: TextStyle(fontSize: 9, color: impactColor)),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            );
-                          }),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildGlobalStat(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        children: [
-          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
-          const SizedBox(height: 4),
-          Text(label, style: const TextStyle(fontSize: 10, color: TV.textDim)),
-        ],
-      ),
-    );
-  }
-  
-  String _formatBigNumber(dynamic num) {
-    if (num == null) return '0';
-    double n = num is int ? num.toDouble() : num.toDouble();
-    if (n >= 1e12) return '${(n / 1e12).toStringAsFixed(2)}T';
-    if (n >= 1e9) return '${(n / 1e9).toStringAsFixed(2)}B';
-    if (n >= 1e6) return '${(n / 1e6).toStringAsFixed(2)}M';
-    if (n >= 1e3) return '${(n / 1e3).toStringAsFixed(2)}K';
-    return n.toStringAsFixed(2);
-  }
-  
-  void _showFullHistory(BuildContext context, List signals) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: TV.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          width: 600,
-          height: 500,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.history, color: TV.blue, size: 24),
-                  const SizedBox(width: 12),
-                  const Text('SİNYAL GEÇMİŞİ', style: TextStyle(fontSize: 18, color: TV.text, fontWeight: FontWeight.bold)),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: TV.textDim),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const Divider(color: TV.border),
-              const SizedBox(height: 8),
-              // Header
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                decoration: BoxDecoration(color: TV.bg, borderRadius: BorderRadius.circular(8)),
-                child: const Row(
-                  children: [
-                    SizedBox(width: 60, child: Text('YÖN', style: TextStyle(fontSize: 10, color: TV.textMuted, fontWeight: FontWeight.w600))),
-                    SizedBox(width: 50, child: Text('KRİPTO', style: TextStyle(fontSize: 10, color: TV.textMuted, fontWeight: FontWeight.w600))),
-                    Expanded(child: Text('TARİH', style: TextStyle(fontSize: 10, color: TV.textMuted, fontWeight: FontWeight.w600))),
-                    SizedBox(width: 80, child: Text('GİRİŞ', style: TextStyle(fontSize: 10, color: TV.textMuted, fontWeight: FontWeight.w600))),
-                    SizedBox(width: 50, child: Text('GÜVEN', style: TextStyle(fontSize: 10, color: TV.textMuted, fontWeight: FontWeight.w600))),
-                    SizedBox(width: 60, child: Text('SONUÇ', style: TextStyle(fontSize: 10, color: TV.textMuted, fontWeight: FontWeight.w600))),
-                    SizedBox(width: 60, child: Text('PnL', style: TextStyle(fontSize: 10, color: TV.textMuted, fontWeight: FontWeight.w600))),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              // List
-              Expanded(
-                child: ListView.builder(
-                  itemCount: signals.length,
-                  itemBuilder: (context, index) {
-                    final s = signals[index];
-                    final direction = s['direction'] ?? 'WAIT';
-                    final status = s['status'] ?? 'PENDING';
-                    final confidence = s['confidence'] ?? 0;
-                    final crypto = s['crypto'] ?? 'BTC';
-                    final entryPrice = s['entry_price'] ?? 0;
-                    final pnl = s['pnl_percent'];
-                    
-                    Color dirColor = direction == 'LONG' ? TV.green : (direction == 'SHORT' ? TV.red : TV.orange);
-                    Color statusColor = status == 'WIN' ? TV.green : (status == 'LOSS' ? TV.red : TV.orange);
-                    String statusEmoji = status == 'WIN' ? '✅' : (status == 'LOSS' ? '❌' : '⏳');
-                    
-                    String timeStr = '';
-                    try {
-                      final ts = s['timestamp'] ?? '';
-                      if (ts.toString().isNotEmpty) {
-                        timeStr = ts.toString().substring(5, 16).replaceAll('T', ' ');
-                      }
-                    } catch (_) {}
-                    
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 4),
-                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: index % 2 == 0 ? TV.bg : Colors.transparent,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: status == 'WIN' ? TV.green.withOpacity(0.2) : (status == 'LOSS' ? TV.red.withOpacity(0.2) : Colors.transparent),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 60,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(color: dirColor.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-                              child: Text(direction, style: TextStyle(fontSize: 9, color: dirColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-                            ),
-                          ),
-                          SizedBox(width: 50, child: Text(crypto, style: const TextStyle(fontSize: 11, color: TV.text))),
-                          Expanded(child: Text(timeStr, style: const TextStyle(fontSize: 10, color: TV.textDim))),
-                          SizedBox(width: 80, child: Text('\$${_fmt(entryPrice)}', style: const TextStyle(fontSize: 10, color: TV.text, fontFamily: 'monospace'))),
-                          SizedBox(width: 50, child: Text('%${confidence.toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, color: TV.textDim))),
-                          SizedBox(
-                            width: 60,
-                            child: Row(
-                              children: [
-                                Text(statusEmoji, style: const TextStyle(fontSize: 12)),
-                                const SizedBox(width: 4),
-                                Text(status, style: TextStyle(fontSize: 9, color: statusColor, fontWeight: FontWeight.w600)),
-                              ],
-                            ),
-                          ),
-                          SizedBox(
-                            width: 60,
-                            child: Text(
-                              pnl != null ? '${pnl >= 0 ? '+' : ''}${pnl.toStringAsFixed(2)}%' : '-',
-                              style: TextStyle(fontSize: 10, color: pnl != null ? (pnl >= 0 ? TV.green : TV.red) : TV.textMuted, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-              // Summary
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: TV.bg, borderRadius: BorderRadius.circular(8)),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildHistoryStat('Toplam', '${signals.length}', TV.blue),
-                    _buildHistoryStat('Kazanan', '${signals.where((s) => s['status'] == 'WIN').length}', TV.green),
-                    _buildHistoryStat('Kaybeden', '${signals.where((s) => s['status'] == 'LOSS').length}', TV.red),
-                    _buildHistoryStat('Bekleyen', '${signals.where((s) => s['status'] == 'PENDING').length}', TV.orange),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-  
-  Widget _buildHistoryStat(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-        Text(label, style: const TextStyle(fontSize: 10, color: TV.textDim)),
-      ],
     );
   }
   

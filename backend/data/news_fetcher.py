@@ -317,6 +317,7 @@ def get_full_news_report() -> Dict:
     """
     return {
         "crypto_news": get_crypto_news(),
+        "political_news": get_trump_crypto_news(),
         "fear_greed": get_fear_greed_index(),
         "important_events": get_important_events_today(),
         "market_sentiment": get_market_sentiment(),

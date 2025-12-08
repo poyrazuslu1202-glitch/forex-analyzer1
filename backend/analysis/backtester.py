@@ -7,7 +7,7 @@ from typing import Dict, List
 from datetime import datetime
 import statistics
 
-def backtest_strategy(candles: List[Dict], lookback: int = 3, min_trades: int = 50) -> Dict:
+def backtest_strategy(candles: List[Dict], lookback: int = 5, min_trades: int = 50) -> Dict:
     """
     Geçmiş verilerle strateji backtest yapar.
     
@@ -19,16 +19,14 @@ def backtest_strategy(candles: List[Dict], lookback: int = 3, min_trades: int = 
     candles : List[Dict]
         Mum verileri (open, high, low, close, timestamp)
     lookback : int
-        Sinyal üretmek için geriye bakılacak mum sayısı (3 = daha fazla trade)
-    min_trades : int
-        Minimum trade sayısı hedefi
+        Sinyal üretmek için geriye bakılacak mum sayısı
     
     Returns:
     --------
     Dict : Backtest sonuçları ve istatistikler
     """
     if len(candles) < lookback + 5:
-        return {"error": "Yetersiz veri", "min_required": lookback + 5, "current_candles": len(candles)}
+        return {"error": "Yetersiz veri", "min_required": lookback + 5}
     
     trades = []
     
@@ -141,10 +139,9 @@ def _generate_signal(candles: List[Dict]) -> Dict:
     elif momentum < -0.5:
         score -= 20
     
-    # Daha düşük threshold = daha fazla trade (50+ trade hedefi)
-    if score >= 25:
+    if score >= 40:
         return {'direction': 'LONG', 'strength': score}
-    elif score <= -25:
+    elif score <= -40:
         return {'direction': 'SHORT', 'strength': abs(score)}
     else:
         return {'direction': 'WAIT', 'strength': abs(score)}
