@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
+from datetime import datetime
 
 # Kendi modüllerimiz
 from data.price_fetcher import get_analysis
@@ -18,8 +19,11 @@ from analysis.ict_concepts import get_all_kill_zones_status, get_ict_analysis
 from analysis.strategy_analyzer import generate_trade_signal
 from analysis.backtester import backtest_strategy, get_real_confidence
 from analysis.supply_demand import find_all_zones
+from analysis.killzone_strategy import get_full_killzone_analysis, get_active_killzone_strategy, KILLZONE_BEHAVIORS
+from analysis.trade_journal import record_signal, verify_past_signals, get_journal_stats, get_signal_history, clear_journal
 from data.crypto_fetcher import get_crypto_candles, get_multi_crypto_summary, SUPPORTED_CRYPTOS
 from data.news_fetcher import get_full_news_report, get_crypto_news, get_fear_greed_index, get_market_sentiment
+from data.market_data import get_top_coins, get_trending_coins, get_global_market_data, get_economic_calendar, get_full_market_data
 
 # ============================================
 # FastAPI Uygulaması Oluştur
@@ -260,13 +264,40 @@ def full_report():
     # News ve Sentiment
     news_report = get_full_news_report()
     
+    # Kill Zone Stratejileri
+    killzone_data = get_full_killzone_analysis(candles)
+    
+    # Trade Journal - Sinyal kaydet ve istatistikleri al
+    if signal.get('direction') in ['LONG', 'SHORT']:
+        plan = signal.get('trade_plan', {})
+        record_signal(
+            crypto="BTC",
+            direction=signal.get('direction'),
+            confidence=signal.get('confidence', 50),
+            entry_price=plan.get('entry_price', 0),
+            stop_loss=plan.get('stop_loss', 0),
+            take_profit_1=plan.get('take_profit_1', 0),
+            take_profit_2=plan.get('take_profit_2', 0),
+            ict_analysis=ict,
+            backtest_stats=backtest
+        )
+    
+    # Geçmiş sinyalleri doğrula
+    current_price = btc_data.get('summary', {}).get('current_price', 0)
+    verify_past_signals(current_price, "BTC")
+    
+    # Journal istatistiklerini al
+    journal_stats = get_journal_stats()
+    
     return {
         "generated_at": signal.get('generated_at'),
         "btc_report": btc_data,
         "ict_analysis": ict,
         "trade_signal": signal,
         "backtest": backtest,
-        "news": news_report
+        "news": news_report,
+        "killzone_strategy": killzone_data,
+        "journal": journal_stats
     }
 
 
@@ -375,6 +406,147 @@ def sentiment():
     return get_market_sentiment()
 
 
+# ============================================
+# MARKET DATA - CoinGecko & Economic Calendar
+# ============================================
+
+@app.get("/market-data")
+def market_data():
+    """
+    Tam piyasa verisi döndürür.
+    - Top 20 Coins (CoinGecko)
+    - Trending Coins
+    - Global Market Data
+    - Economic Calendar
+    
+    Kullanım: GET http://localhost:8000/market-data
+    """
+    return get_full_market_data()
+
+
+@app.get("/top-coins")
+def top_coins(limit: int = 20):
+    """
+    En büyük kripto paralar (market cap sıralı).
+    
+    Kullanım: GET http://localhost:8000/top-coins?limit=20
+    """
+    return {
+        "coins": get_top_coins(limit),
+        "count": limit,
+        "updated_at": datetime.now().isoformat()
+    }
+
+
+@app.get("/trending-coins")
+def trending_coins():
+    """
+    Trend olan kripto paralar.
+    
+    Kullanım: GET http://localhost:8000/trending-coins
+    """
+    return {
+        "trending": get_trending_coins(),
+        "updated_at": datetime.now().isoformat()
+    }
+
+
+@app.get("/global-market")
+def global_market():
+    """
+    Global kripto piyasa verileri.
+    - Total Market Cap
+    - BTC/ETH Dominance
+    - 24h Volume
+    
+    Kullanım: GET http://localhost:8000/global-market
+    """
+    return get_global_market_data()
+
+
+@app.get("/economic-calendar")
+def economic_calendar():
+    """
+    Ekonomik takvim - Önemli finansal olaylar.
+    - FED Kararları
+    - NFP
+    - CPI
+    - GDP
+    
+    Kullanım: GET http://localhost:8000/economic-calendar
+    """
+    return {
+        "events": get_economic_calendar(),
+        "updated_at": datetime.now().isoformat()
+    }
+
+
+@app.get("/killzone-strategy")
+def killzone_strategy():
+    """
+    Kill Zone stratejileri döndürür.
+    - Asian Range
+    - London Manipulation
+    - NY Reversal
+    - Aktif Zone bilgisi
+    
+    Kullanım: GET http://localhost:8000/killzone-strategy
+    """
+    btc_data = get_btc_candles(hours=24)
+    
+    if not btc_data.get('success'):
+        return {"error": "Veri alınamadı"}
+    
+    candles = btc_data.get('candles', [])
+    return get_full_killzone_analysis(candles)
+
+
+@app.get("/killzone-behaviors")
+def killzone_behaviors():
+    """
+    Tüm Kill Zone davranışlarını döndürür.
+    
+    Kullanım: GET http://localhost:8000/killzone-behaviors
+    """
+    return {
+        "behaviors": KILLZONE_BEHAVIORS,
+        "active_strategy": get_active_killzone_strategy()
+    }
+
+
+@app.get("/journal")
+def journal():
+    """
+    Trade Journal istatistiklerini döndürür.
+    
+    Kullanım: GET http://localhost:8000/journal
+    """
+    return get_journal_stats()
+
+
+@app.get("/journal/history")
+def journal_history(limit: int = 50):
+    """
+    Sinyal geçmişini döndürür.
+    
+    Kullanım: GET http://localhost:8000/journal/history?limit=50
+    """
+    return {
+        "signals": get_signal_history(limit),
+        "count": len(get_signal_history(limit))
+    }
+
+
+@app.post("/journal/clear")
+def journal_clear():
+    """
+    Journal'ı temizler (dikkatli kullan!).
+    
+    Kullanım: POST http://localhost:8000/journal/clear
+    """
+    return clear_journal()
+
+
 @app.get("/full-analysis/{symbol}")
 def full_analysis(symbol: str, hours: int = 24):
     """
@@ -404,6 +576,31 @@ def full_analysis(symbol: str, hours: int = 24):
         signal['confidence'] = get_real_confidence(backtest, signal.get('direction', 'WAIT'))
         signal['confidence_source'] = 'BACKTEST'
     
+    # Kill Zone Stratejileri
+    killzone_data = get_full_killzone_analysis(candles)
+    
+    # Trade Journal - Sinyal kaydet
+    if signal.get('direction') in ['LONG', 'SHORT']:
+        plan = signal.get('trade_plan', {})
+        record_signal(
+            crypto=symbol.upper(),
+            direction=signal.get('direction'),
+            confidence=signal.get('confidence', 50),
+            entry_price=plan.get('entry_price', 0),
+            stop_loss=plan.get('stop_loss', 0),
+            take_profit_1=plan.get('take_profit_1', 0),
+            take_profit_2=plan.get('take_profit_2', 0),
+            ict_analysis=ict,
+            backtest_stats=backtest
+        )
+    
+    # Geçmiş sinyalleri doğrula
+    current_price = crypto_data.get('summary', {}).get('current_price', 0)
+    verify_past_signals(current_price, symbol.upper())
+    
+    # Journal istatistiklerini al
+    journal_stats = get_journal_stats()
+    
     return {
         "crypto": symbol.upper(),
         "name": crypto_data.get('name'),
@@ -413,7 +610,9 @@ def full_analysis(symbol: str, hours: int = 24):
         "ict_analysis": ict,
         "supply_demand": zones,
         "trade_signal": signal,
-        "backtest": backtest
+        "backtest": backtest,
+        "killzone_strategy": killzone_data,
+        "journal": journal_stats
     }
 
 
