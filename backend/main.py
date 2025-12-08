@@ -20,8 +20,6 @@ from analysis.backtester import backtest_strategy, get_real_confidence
 from analysis.supply_demand import find_all_zones
 from data.crypto_fetcher import get_crypto_candles, get_multi_crypto_summary, SUPPORTED_CRYPTOS
 from data.news_fetcher import get_full_news_report, get_crypto_news, get_fear_greed_index, get_market_sentiment
-from analysis.killzone_strategy import get_full_killzone_analysis, get_active_killzone_strategy, KILLZONE_BEHAVIORS
-from analysis.trade_journal import record_signal, verify_past_signals, get_journal_stats, get_signal_history, clear_journal
 
 # ============================================
 # FastAPI Uygulaması Oluştur
@@ -262,41 +260,13 @@ def full_report():
     # News ve Sentiment
     news_report = get_full_news_report()
     
-    # Kill Zone Strategy
-    killzone = get_full_killzone_analysis(candles)
-    
-    # Geçmiş sinyalleri doğrula
-    current_price = candles[-1]['close'] if candles else 0
-    verify_past_signals(current_price, "BTC")
-    
-    # Yeni sinyali kaydet (WAIT değilse)
-    if signal.get('direction') != 'WAIT':
-        trade_plan = signal.get('trade_plan', {})
-        recorded = record_signal(
-            crypto="BTC",
-            direction=signal.get('direction', 'WAIT'),
-            confidence=signal.get('confidence', 50),
-            entry_price=trade_plan.get('entry_price', current_price),
-            stop_loss=trade_plan.get('stop_loss', 0),
-            take_profit_1=trade_plan.get('take_profit_1', 0),
-            take_profit_2=trade_plan.get('take_profit_2', 0),
-            ict_analysis=ict,
-            backtest_stats=backtest
-        )
-        signal['journal_id'] = recorded.get('id')
-    
-    # Journal istatistikleri
-    journal_stats = get_journal_stats()
-    
     return {
         "generated_at": signal.get('generated_at'),
         "btc_report": btc_data,
         "ict_analysis": ict,
         "trade_signal": signal,
         "backtest": backtest,
-        "news": news_report,
-        "killzone_strategy": killzone,
-        "journal": journal_stats
+        "news": news_report
     }
 
 
@@ -403,73 +373,6 @@ def sentiment():
     Kullanım: GET http://localhost:8000/sentiment
     """
     return get_market_sentiment()
-
-
-@app.get("/killzone-strategy")
-def killzone_strategy():
-    """
-    Kill Zone stratejileri ve Asian Range analizi.
-    TJR/ICT stratejileri dahil.
-    
-    Kullanım: GET http://localhost:8000/killzone-strategy
-    """
-    btc_data = get_btc_candles(hours=24)
-    
-    if not btc_data.get('success'):
-        return {
-            "active_strategy": get_active_killzone_strategy(),
-            "all_behaviors": KILLZONE_BEHAVIORS
-        }
-    
-    candles = btc_data.get('candles', [])
-    return get_full_killzone_analysis(candles)
-
-
-@app.get("/killzone-behaviors")
-def killzone_behaviors():
-    """
-    Tüm Kill Zone davranışlarını ve stratejilerini döndürür.
-    
-    Kullanım: GET http://localhost:8000/killzone-behaviors
-    """
-    return {
-        "behaviors": KILLZONE_BEHAVIORS,
-        "active": get_active_killzone_strategy()
-    }
-
-
-@app.get("/journal")
-def get_journal():
-    """
-    Trade journal istatistiklerini döndürür.
-    Tüm geçmiş sinyaller ve GERÇEK performans.
-    
-    Kullanım: GET http://localhost:8000/journal
-    """
-    return get_journal_stats()
-
-
-@app.get("/journal/history")
-def journal_history(limit: int = 50):
-    """
-    Sinyal geçmişini döndürür.
-    
-    Kullanım: GET http://localhost:8000/journal/history?limit=50
-    """
-    return {
-        "signals": get_signal_history(limit),
-        "count": min(limit, len(get_signal_history(limit)))
-    }
-
-
-@app.post("/journal/clear")
-def journal_clear():
-    """
-    Journal'ı temizler (dikkatli kullan!).
-    
-    Kullanım: POST http://localhost:8000/journal/clear
-    """
-    return clear_journal()
 
 
 @app.get("/full-analysis/{symbol}")
