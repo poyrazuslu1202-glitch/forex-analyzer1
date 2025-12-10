@@ -6,7 +6,6 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:async';
 import 'package:http/http.dart' as http;
 
 void main() {
@@ -61,33 +60,11 @@ class _HomePageState extends State<HomePage> {
   final String apiUrl = 'https://forex-analyzer1-cyhv.onrender.com';
   String selectedCrypto = 'BTC'; // BTC veya SOL
   int currentPage = 0; // 0 = Ana Sayfa, 1 = Market/Haberler
-  Timer? _autoRefreshTimer;
-  int _refreshCountdown = 30;
-  DateTime? _lastUpdate;
 
   @override
   void initState() {
     super.initState();
     _fetchData();
-    _startAutoRefresh();
-  }
-  
-  @override
-  void dispose() {
-    _autoRefreshTimer?.cancel();
-    super.dispose();
-  }
-  
-  void _startAutoRefresh() {
-    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _refreshCountdown--;
-        if (_refreshCountdown <= 0) {
-          _refreshCountdown = 30;
-          _fetchData();
-        }
-      });
-    });
   }
   
   Future<void> _fetchData() async {
@@ -99,7 +76,6 @@ class _HomePageState extends State<HomePage> {
         http.get(Uri.parse('$apiUrl/full-report')),
         http.get(Uri.parse('$apiUrl/supply-demand/BTC')),
         http.get(Uri.parse('$apiUrl/full-analysis/SOL')),
-        http.get(Uri.parse('$apiUrl/market-data')),
       ]);
       
       if (responses[0].statusCode == 200) {
@@ -111,17 +87,23 @@ class _HomePageState extends State<HomePage> {
       if (responses[2].statusCode == 200) {
         solanaData = json.decode(responses[2].body);
       }
-      if (responses[3].statusCode == 200) {
-        marketData = json.decode(responses[3].body);
-      }
       
-      setState(() { 
-        isLoading = false; 
-        _lastUpdate = DateTime.now();
-        _refreshCountdown = 30;
-      });
+      setState(() { isLoading = false; });
     } catch (e) {
       setState(() { error = 'Backend çalışıyor mu?\n\n$e'; isLoading = false; });
+    }
+  }
+  
+  Future<void> _fetchMarketData() async {
+    setState(() { isLoading = true; });
+    try {
+      final response = await http.get(Uri.parse('$apiUrl/market-data'));
+      if (response.statusCode == 200) {
+        marketData = json.decode(response.body);
+      }
+      setState(() { isLoading = false; });
+    } catch (e) {
+      setState(() { isLoading = false; });
     }
   }
 
@@ -193,24 +175,11 @@ class _HomePageState extends State<HomePage> {
                   Text('MARKET & TAKVİM', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: TV.text)),
                 ],
               ),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: TV.green.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: TV.green),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.autorenew, color: TV.green, size: 14),
-                        const SizedBox(width: 6),
-                        Text('$_refreshCountdown sn', style: const TextStyle(fontSize: 12, color: TV.green, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                ],
+              IconButton(
+                onPressed: isLoading ? null : _fetchMarketData,
+                icon: isLoading 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: TV.blue))
+                  : const Icon(Icons.refresh, color: TV.blue),
               ),
             ],
           ),
@@ -779,9 +748,6 @@ class _HomePageState extends State<HomePage> {
           if (currentPage == 0 && signal != null) _buildMainSignalCard(signal),
           if (currentPage == 0 && ict != null) _buildKillZonesPanel(ict['kill_zones']),
           
-          // Auto-refresh indicator
-          _buildAutoRefreshIndicator(),
-          
           const Spacer(),
           
           Padding(
@@ -842,7 +808,11 @@ class _HomePageState extends State<HomePage> {
           ),
           Expanded(
             child: GestureDetector(
-              onTap: () => setState(() => currentPage = 1),
+              onTap: () {
+                setState(() => currentPage = 1);
+                // Market sayfasına geçince veriyi çek
+                if (marketData == null) _fetchMarketData();
+              },
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
@@ -861,47 +831,6 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildAutoRefreshIndicator() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: TV.bg,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: TV.green.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(
-              value: _refreshCountdown / 30,
-              strokeWidth: 2,
-              backgroundColor: TV.border,
-              valueColor: const AlwaysStoppedAnimation<Color>(TV.green),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Otomatik Yenileme', style: TextStyle(fontSize: 10, color: TV.textDim)),
-                Text('$_refreshCountdown saniye', style: TextStyle(fontSize: 12, color: TV.green, fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ),
-          if (_lastUpdate != null)
-            Text(
-              '${_lastUpdate!.hour.toString().padLeft(2, '0')}:${_lastUpdate!.minute.toString().padLeft(2, '0')}',
-              style: const TextStyle(fontSize: 10, color: TV.textMuted),
-            ),
         ],
       ),
     );

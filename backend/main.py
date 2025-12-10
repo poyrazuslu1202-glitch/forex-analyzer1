@@ -267,26 +267,7 @@ def full_report():
     # Kill Zone Stratejileri
     killzone_data = get_full_killzone_analysis(candles)
     
-    # Trade Journal - Sinyal kaydet ve istatistikleri al
-    if signal.get('direction') in ['LONG', 'SHORT']:
-        plan = signal.get('trade_plan', {})
-        record_signal(
-            crypto="BTC",
-            direction=signal.get('direction'),
-            confidence=signal.get('confidence', 50),
-            entry_price=plan.get('entry_price', 0),
-            stop_loss=plan.get('stop_loss', 0),
-            take_profit_1=plan.get('take_profit_1', 0),
-            take_profit_2=plan.get('take_profit_2', 0),
-            ict_analysis=ict,
-            backtest_stats=backtest
-        )
-    
-    # Geçmiş sinyalleri doğrula
-    current_price = btc_data.get('summary', {}).get('current_price', 0)
-    verify_past_signals(current_price, "BTC")
-    
-    # Journal istatistiklerini al
+    # Journal istatistiklerini al (kaydetme işlemi ayrı endpoint'te)
     journal_stats = get_journal_stats()
     
     return {
@@ -579,26 +560,7 @@ def full_analysis(symbol: str, hours: int = 24):
     # Kill Zone Stratejileri
     killzone_data = get_full_killzone_analysis(candles)
     
-    # Trade Journal - Sinyal kaydet
-    if signal.get('direction') in ['LONG', 'SHORT']:
-        plan = signal.get('trade_plan', {})
-        record_signal(
-            crypto=symbol.upper(),
-            direction=signal.get('direction'),
-            confidence=signal.get('confidence', 50),
-            entry_price=plan.get('entry_price', 0),
-            stop_loss=plan.get('stop_loss', 0),
-            take_profit_1=plan.get('take_profit_1', 0),
-            take_profit_2=plan.get('take_profit_2', 0),
-            ict_analysis=ict,
-            backtest_stats=backtest
-        )
-    
-    # Geçmiş sinyalleri doğrula
-    current_price = crypto_data.get('summary', {}).get('current_price', 0)
-    verify_past_signals(current_price, symbol.upper())
-    
-    # Journal istatistiklerini al
+    # Journal istatistiklerini al (hızlı)
     journal_stats = get_journal_stats()
     
     return {
