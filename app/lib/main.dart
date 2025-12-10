@@ -739,17 +739,25 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           
-          // Page Selector
-          _buildPageSelector(),
+          // Scrollable Content
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  // Page Selector
+                  _buildPageSelector(),
+                  
+                  // Crypto Selector (sadece ana sayfada)
+                  if (currentPage == 0) _buildCryptoSelector(),
+                  
+                  if (currentPage == 0 && signal != null) _buildMainSignalCard(signal),
+                  if (currentPage == 0 && ict != null) _buildKillZonesPanel(ict['kill_zones']),
+                ],
+              ),
+            ),
+          ),
           
-          // Crypto Selector (sadece ana sayfada)
-          if (currentPage == 0) _buildCryptoSelector(),
-          
-          if (currentPage == 0 && signal != null) _buildMainSignalCard(signal),
-          if (currentPage == 0 && ict != null) _buildKillZonesPanel(ict['kill_zones']),
-          
-          const Spacer(),
-          
+          // YENİLE Butonu - Her zaman altta
           Padding(
             padding: const EdgeInsets.all(16),
             child: SizedBox(
