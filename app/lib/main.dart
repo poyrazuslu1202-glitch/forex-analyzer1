@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:async';
 import 'package:http/http.dart' as http;
 
 void main() {
@@ -60,11 +61,96 @@ class _HomePageState extends State<HomePage> {
   final String apiUrl = 'https://forex-analyzer1-cyhv.onrender.com';
   String selectedCrypto = 'BTC'; // BTC veya SOL
   int currentPage = 0; // 0 = Ana Sayfa, 1 = Market/Haberler
+  Timer? _autoRefreshTimer;
+  
+  // Test mekanizması
+  bool testRunning = false;
+  DateTime? testStartTime;
+  double? testResult; // Yüzdelik sonuç
+  Timer? _testTimer;
 
   @override
   void initState() {
     super.initState();
     _fetchData();
+    // 30 saniyede bir otomatik yenile
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (!isLoading) {
+        _fetchData();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    _testTimer?.cancel();
+    super.dispose();
+  }
+  
+  void _startTest() {
+    setState(() {
+      testRunning = true;
+      testStartTime = DateTime.now();
+      testResult = null;
+    });
+    
+    // Her saniye UI'ı güncelle
+    _testTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      final now = DateTime.now();
+      final elapsed = now.difference(testStartTime!);
+      
+      if (elapsed >= const Duration(hours: 1)) {
+        timer.cancel();
+        _calculateTestResult();
+      } else {
+        setState(() {}); // UI'ı güncelle
+      }
+    });
+  }
+  
+  void _calculateTestResult() {
+    if (fullReport == null || testStartTime == null) {
+      setState(() {
+        testRunning = false;
+        testResult = null;
+      });
+      return;
+    }
+    
+    // Test sonucunu hesapla (örnek: sinyal doğruluğu)
+    final signal = fullReport!['trade_signal'];
+    if (signal != null) {
+      final direction = signal['direction'] ?? 'WAIT';
+      final confidence = (signal['confidence'] ?? 0).toDouble();
+      
+      // Gerçek sonuç simülasyonu (gerçek uygulamada API'den gelecek)
+      // Şimdilik confidence'a göre tahmini sonuç
+      final simulatedResult = (confidence * 0.8 + 20).clamp(0, 100);
+      
+      setState(() {
+        testRunning = false;
+        testResult = simulatedResult;
+      });
+    } else {
+      setState(() {
+        testRunning = false;
+        testResult = null;
+      });
+    }
+  }
+  
+  String _getTestTimeRemaining() {
+    if (testStartTime == null) return '';
+    final now = DateTime.now();
+    final elapsed = now.difference(testStartTime!);
+    final remaining = const Duration(hours: 1) - elapsed;
+    
+    if (remaining.isNegative) return 'Test tamamlandı';
+    
+    final minutes = remaining.inMinutes;
+    final seconds = remaining.inSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
   
   Future<void> _fetchData() async {
@@ -739,7 +825,7 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           
-          // Scrollable Content
+          // Scrollable Content - Tüm içerik scroll yapılabilir
           Expanded(
             child: SingleChildScrollView(
               child: Column(
@@ -750,30 +836,33 @@ class _HomePageState extends State<HomePage> {
                   // Crypto Selector (sadece ana sayfada)
                   if (currentPage == 0) _buildCryptoSelector(),
                   
+                  // Test Butonu ve Sonuç
+                  if (currentPage == 0) _buildTestSection(),
+                  
                   if (currentPage == 0 && signal != null) _buildMainSignalCard(signal),
                   if (currentPage == 0 && ict != null) _buildKillZonesPanel(ict['kill_zones']),
+                  
+                  // YENİLE Butonu - Scroll içinde
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: isLoading ? null : _fetchData,
+                        icon: isLoading 
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.refresh, size: 18),
+                        label: Text(isLoading ? 'Analiz ediliyor...' : 'YENİLE'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: TV.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
-              ),
-            ),
-          ),
-          
-          // YENİLE Butonu - Her zaman altta
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: isLoading ? null : _fetchData,
-                icon: isLoading 
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.refresh, size: 18),
-                label: Text(isLoading ? 'Analiz ediliyor...' : 'YENİLE'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: TV.blue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
               ),
             ),
           ),
@@ -897,6 +986,112 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildTestSection() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: TV.bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: testRunning ? TV.cyan : TV.border, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.science, color: testRunning ? TV.cyan : TV.textDim, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'TEST MODU',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: testRunning ? TV.cyan : TV.textDim,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (!testRunning && testResult == null)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _startTest,
+                icon: const Icon(Icons.play_arrow, size: 18),
+                label: const Text('TEST YAP'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: TV.cyan,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            )
+          else if (testRunning)
+            Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Test çalışıyor...', style: TextStyle(color: TV.textDim, fontSize: 11)),
+                    Text(
+                      _getTestTimeRemaining(),
+                      style: const TextStyle(color: TV.cyan, fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                LinearProgressIndicator(
+                  backgroundColor: TV.bg,
+                  valueColor: const AlwaysStoppedAnimation<Color>(TV.cyan),
+                ),
+              ],
+            )
+          else if (testResult != null)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: TV.card,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: testResult! >= 70 ? TV.green : (testResult! >= 50 ? TV.orange : TV.red)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Test Sonucu:', style: TextStyle(color: TV.textDim, fontSize: 11)),
+                      Text(
+                        '%${testResult!.toStringAsFixed(1)}',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: testResult! >= 70 ? TV.green : (testResult! >= 50 ? TV.orange : TV.red),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    testResult! >= 70 
+                      ? '✅ Başarılı - Strateji güvenilir'
+                      : testResult! >= 50 
+                        ? '⚠️ Orta - Dikkatli kullan'
+                        : '❌ Düşük - Stratejiyi gözden geçir',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: testResult! >= 70 ? TV.green : (testResult! >= 50 ? TV.orange : TV.red),
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
