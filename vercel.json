@@ -1,11 +1,21 @@
 {
-  "buildCommand": "cd app && flutter build web --release",
-  "outputDirectory": "app/build/web",
-  "rewrites": [
+  "version": 2,
+  "builds": [
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "src": "app/build/web/**",
+      "use": "@vercel/static"
     }
-  ]
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/app/build/web/$1"
+    },
+    {
+      "src": "/(.*\\.(js|css|ico|png|jpg|jpeg|svg|woff|woff2|ttf|eot))",
+      "dest": "/app/build/web/$1"
+    }
+  ],
+  "outputDirectory": "app/build/web"
 }
 
