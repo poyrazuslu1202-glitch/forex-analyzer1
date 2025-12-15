@@ -68,6 +68,10 @@ class _HomePageState extends State<HomePage> {
   DateTime? testStartTime;
   double? testResult; // Yüzdelik sonuç
   Timer? _testTimer;
+  
+  // Fiyat değişikliği takibi
+  double? lastPrice;
+  double priceChangeThreshold = 1.0; // %1 veya %2 - varsayılan %1
 
   @override
   void initState() {
@@ -165,7 +169,25 @@ class _HomePageState extends State<HomePage> {
       ]);
       
       if (responses[0].statusCode == 200) {
-        fullReport = json.decode(responses[0].body);
+        final newReport = json.decode(responses[0].body);
+        
+        // Fiyat değişikliği kontrolü - %1 veya %2 değişiklik varsa analiz yap
+        final currentPrice = _getCurrentPrice(newReport);
+        if (currentPrice != null && lastPrice != null) {
+          final priceChange = ((currentPrice - lastPrice) / lastPrice * 100).abs();
+          
+          // %1 veya %2 değişiklik varsa analiz yap
+          if (priceChange >= priceChangeThreshold) {
+            _analyzePriceChange(currentPrice, lastPrice, priceChange);
+          }
+        }
+        
+        // Son fiyatı kaydet
+        if (currentPrice != null) {
+          lastPrice = currentPrice;
+        }
+        
+        fullReport = newReport;
       }
       if (responses[1].statusCode == 200) {
         supplyDemand = json.decode(responses[1].body);
@@ -180,14 +202,57 @@ class _HomePageState extends State<HomePage> {
     }
   }
   
+  double? _getCurrentPrice(Map<String, dynamic>? report) {
+    if (report == null) return null;
+    
+    final btcReport = report['btc_report'];
+    if (btcReport != null && btcReport['summary'] != null) {
+      final price = btcReport['summary']['current_price'];
+      if (price != null) {
+        return price is int ? price.toDouble() : (price as double);
+      }
+    }
+    
+    final signal = report['trade_signal'];
+    if (signal != null && signal['trade_plan'] != null) {
+      final entryPrice = signal['trade_plan']['entry_price'];
+      if (entryPrice != null) {
+        return entryPrice is int ? entryPrice.toDouble() : (entryPrice as double);
+      }
+    }
+    
+    return null;
+  }
+  
+  void _analyzePriceChange(double currentPrice, double lastPrice, double changePercent) {
+    // Fiyat değişikliği analizi - %1 veya %2 değişiklik tespit edildi
+    final direction = currentPrice > lastPrice ? 'YÜKSELİŞ' : 'DÜŞÜŞ';
+    final isSignificant = changePercent >= priceChangeThreshold;
+    
+    if (isSignificant) {
+      // Önemli fiyat değişikliği - analiz yap
+      print('📊 Fiyat Değişikliği Analizi: $direction - %${changePercent.toStringAsFixed(2)}');
+      // Burada backend'e özel analiz isteği gönderilebilir
+      // veya mevcut analizi güncelleyebiliriz
+    }
+  }
+  
   Future<void> _fetchMarketData() async {
     setState(() { isLoading = true; });
     try {
-      final response = await http.get(Uri.parse('$apiUrl/market-data'));
+      final response = await http.get(Uri.parse('$apiUrl/market-data')).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw TimeoutException('İstek zaman aşımına uğradı'),
+      );
       if (response.statusCode == 200) {
         marketData = json.decode(response.body);
       }
       setState(() { isLoading = false; });
+    } on TimeoutException {
+      setState(() { 
+        error = 'Market verisi zaman aşımına uğradı. Tekrar deneyin.'; 
+        isLoading = false; 
+      });
     } catch (e) {
       setState(() { isLoading = false; });
     }
@@ -800,38 +865,34 @@ class _HomePageState extends State<HomePage> {
         color: TV.card,
         border: Border(right: BorderSide(color: TV.border)),
       ),
-      child: Column(
-        children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: TV.border))),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: TV.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                  child: const Text('📊', style: TextStyle(fontSize: 24)),
-                ),
-                const SizedBox(width: 12),
-                const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('FOREX ANALYZER', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: TV.text, letterSpacing: 1)),
-                    Text('ICT Strategy Pro', style: TextStyle(fontSize: 11, color: TV.textDim)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          
-          // Scrollable Content - Tüm içerik scroll yapılabilir
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
+      child: SingleChildScrollView(
+        child: Column(
+          children: [
+            // Header - Artık scroll içinde
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: TV.border))),
+              child: Row(
                 children: [
-                  // Page Selector
-                  _buildPageSelector(),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: TV.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                    child: const Text('📊', style: TextStyle(fontSize: 24)),
+                  ),
+                  const SizedBox(width: 12),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('FOREX ANALYZER', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: TV.text, letterSpacing: 1)),
+                      Text('ICT Strategy Pro', style: TextStyle(fontSize: 11, color: TV.textDim)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            // Page Selector
+            _buildPageSelector(),
                   
                   // Crypto Selector (sadece ana sayfada)
                   if (currentPage == 0) _buildCryptoSelector(),
@@ -839,33 +900,35 @@ class _HomePageState extends State<HomePage> {
                   // Test Butonu ve Sonuç
                   if (currentPage == 0) _buildTestSection(),
                   
+                  // Fiyat Değişikliği Eşiği
+                  if (currentPage == 0) _buildPriceChangeThreshold(),
+                  
                   if (currentPage == 0 && signal != null) _buildMainSignalCard(signal),
                   if (currentPage == 0 && ict != null) _buildKillZonesPanel(ict['kill_zones']),
                   
-                  // YENİLE Butonu - Scroll içinde
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: isLoading ? null : _fetchData,
-                        icon: isLoading 
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.refresh, size: 18),
-                        label: Text(isLoading ? 'Analiz ediliyor...' : 'YENİLE'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: TV.blue,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                      ),
-                    ),
+            // YENİLE Butonu - Scroll içinde
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: isLoading ? null : _fetchData,
+                  icon: isLoading 
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.refresh, size: 18),
+                  label: Text(isLoading ? 'Analiz ediliyor...' : 'YENİLE'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: TV.blue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                ],
+                ),
               ),
             ),
-          ),
+          ],
+        ),
+      ),
         ],
       ),
     );
@@ -1092,6 +1155,89 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildPriceChangeThreshold() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: TV.bg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: TV.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.trending_up, color: TV.textDim, size: 16),
+              const SizedBox(width: 6),
+              const Text(
+                'Fiyat Değişikliği Eşiği',
+                style: TextStyle(fontSize: 11, color: TV.textDim, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => priceChangeThreshold = 1.0),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: priceChangeThreshold == 1.0 ? TV.blue.withOpacity(0.2) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: priceChangeThreshold == 1.0 ? TV.blue : TV.border),
+                    ),
+                    child: Text(
+                      '%1',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: priceChangeThreshold == 1.0 ? TV.blue : TV.textDim,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => priceChangeThreshold = 2.0),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: priceChangeThreshold == 2.0 ? TV.blue.withOpacity(0.2) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: priceChangeThreshold == 2.0 ? TV.blue : TV.border),
+                    ),
+                    child: Text(
+                      '%2',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: priceChangeThreshold == 2.0 ? TV.blue : TV.textDim,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Fiyat %${priceChangeThreshold.toStringAsFixed(0)} değiştiğinde analiz yapılır',
+            style: const TextStyle(fontSize: 9, color: TV.textMuted),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
