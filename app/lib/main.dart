@@ -859,15 +859,19 @@ class _HomePageState extends State<HomePage> {
       ict = fullReport?['ict_analysis'];
     }
     
-    return Container(
+    return SizedBox(
       width: 320,
-      decoration: const BoxDecoration(
-        color: TV.card,
-        border: Border(right: BorderSide(color: TV.border)),
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          children: [
+      child: Container(
+        decoration: const BoxDecoration(
+          color: TV.card,
+          border: Border(right: BorderSide(color: TV.border)),
+        ),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             // Header - Artık scroll içinde
             Container(
               padding: const EdgeInsets.all(20),
@@ -928,8 +932,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
-      ),
-        ],
       ),
     );
   }
